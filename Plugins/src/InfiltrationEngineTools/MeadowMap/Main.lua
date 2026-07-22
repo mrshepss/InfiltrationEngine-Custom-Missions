@@ -38,6 +38,7 @@ local function AddLink(p0, p1)
 	local l1 = l0:Clone()
 
 	l0.CFrame = CFrame.new(p0.Position * 0.75 + p1.Position * 0.25, p0.Position)
+	l0.Archivable = false
 	if not CurrentMap[p0][p1] then
 		CurrentMap[p0][p1] = l0
 		l0.BrickColor = BrickColor.new("Bright blue")
@@ -45,6 +46,7 @@ local function AddLink(p0, p1)
 	end
 
 	l1.CFrame = CFrame.new(p1.Position * 0.75 + p0.Position * 0.25, p1.Position)
+	l1.Archivable = false
 	if not CurrentMap[p1][p0] then
 		CurrentMap[p1][p0] = l1
 		l1.BrickColor = BrickColor.new("Bright blue")
@@ -58,6 +60,7 @@ local function AddOneWayLink(p0, p1)
 	l0.Transparency = 0.5
 
 	l0.CFrame = CFrame.new(p0.Position * 0.75 + p1.Position * 0.25, p0.Position)
+	l0.Archivable = false
 	if not CurrentMap[p0][p1] then
 		CurrentMap[p0][p1] = l0
 		l0.BrickColor = BrickColor.new("Bright blue")
@@ -73,6 +76,7 @@ local function CreateNode(pos, placed, generateLinks)
 
 	local p = Instance.new("Part")
 	p.Size = Vector3.new(2, 2, 2)
+	p.Archivable = false
 	p.Parent = CurrentModel
 	p.CFrame = CFrame.new(pos)
 	p.BrickColor = BrickColor.new("Bright blue")
@@ -97,7 +101,7 @@ local function OpenZone(newZone)
 
 	local DoorNodes = {}
 	for _, prop in pairs(workspace.DebugMission.Props:GetChildren()) do
-		if prop.Name:match("Door") then
+		if prop.Name:match("Door") and prop.ClassName == "Part" then
 			local p0 = (prop.CFrame * CFrame.new(0, -3, DOOR_BUFFER)).p
 			local p1 = (prop.CFrame * CFrame.new(0, -3, -DOOR_BUFFER)).p
 			if ZoneUtil.InZone(newZone, p0) then
@@ -111,7 +115,7 @@ local function OpenZone(newZone)
 
 	if workspace.DebugMission.Cells:FindFirstChild("Links") then
 		for _, link in pairs(workspace.DebugMission.Cells.Links:GetChildren()) do
-			if link:GetAttribute("Path") then
+			if link:GetAttribute("Path") and CurrentZone:GetAttribute("Path") ~= ""then
 				local p0 = (link.CFrame * CFrame.new(0, 0.5, DOOR_BUFFER)).p
 				local p1 = (link.CFrame * CFrame.new(0, 0.5, -DOOR_BUFFER)).p
 				if ZoneUtil.InZone(newZone, p0) then
@@ -125,6 +129,8 @@ local function OpenZone(newZone)
 	end
 
 	CurrentModel = Instance.new("Model")
+	CurrentModel.Name = "MeadowMapNodes"
+	CurrentModel.Archivable = false
 	CurrentModel.Parent = workspace
 	CurrentMap = {}
 	CurrentZone = newZone
@@ -149,13 +155,15 @@ local function OpenZoneWithoutRegenerating(newZone)
 	end
 
 	CurrentModel = Instance.new("Model")
+	CurrentModel.Name = "MeadowMapNodes"
+	CurrentModel.Archivable = false
 	CurrentModel.Parent = workspace
 	CurrentMap = {}
 	CurrentZone = newZone
 
 	game.Selection:Set({ newZone })
 
-	if not CurrentZone:GetAttribute("Path") then
+	if not CurrentZone:GetAttribute("Path") or CurrentZone:GetAttribute("Path") == "" then
 		print("Doing first time generation for zone")
 		return OpenZone(newZone)
 	end
@@ -252,11 +260,7 @@ local LastCTap = 0
 
 return {
 	Init = function(mouse)
-		print("T - Open Cell Meadow Map")
-		print("C - Fully Clear Meadow Map (Tap twice)")
-		print("G - Add Node")
-		print("H - Add Node (No Link Generation)")
-		print("R - Remove")
+		print("T - Open Cell Meadow Map\nC - Fully Clear Meadow Map (Tap twice)\nG - Add Node\nH - Add Node (No Link Generation)\nR - Remove")
 
 		VisibilityToggle.TempReveal(workspace.DebugMission.Cells)
 
