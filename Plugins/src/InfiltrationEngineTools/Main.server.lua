@@ -15,6 +15,8 @@ local SectionVisibilityButton =
 local TerrainSerializationButton =
 	toolbar:CreateButton("Terrain Serialization", "Terrain Serialization", "rbxassetid://115396940325881")
 
+local UserInputService = game:GetService("UserInputService")
+
 local MeadowMap = require(script.Parent.MeadowMap.Main)
 local DoorAccess = require(script.Parent.DoorAccess.Main)
 local PropBarrier = require(script.Parent.PropBarrier.Main)
@@ -73,3 +75,18 @@ end
 
 plugin.Unloading:connect(disablePlugin)
 plugin.Deactivation:connect(disablePlugin)
+
+UserInputService.InputBegan:Connect(function(io)
+	if io.KeyCode == Enum.KeyCode.L then
+		local target = plugin:GetMouse().Target
+		if target and target:GetAttribute("LinkComp") then
+			local linkTo = workspace:FindFirstChild("DebugMission")
+				and workspace.DebugMission.StateComponents:FindFirstChild(target:GetAttribute("LinkComp"), true)
+			if linkTo then
+				game.Selection:Set({ linkTo })
+			else
+				warn("No state component found:", target:GetAttribute("LinkComp"))
+			end
+		end
+	end
+end)

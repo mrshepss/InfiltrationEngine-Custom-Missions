@@ -1,7 +1,7 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 	<External>null</External>
 	<External>nil</External>
-	<Item class="Folder" referent="RBX658445CB81FF45C48F550AE85A7D29C3">
+	<Item class="Folder" referent="RBX81B7E6ED5F754980984D1B8D85216518">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -10,7 +10,7 @@
 			<int64 name="SourceAssetId">-1</int64>
 			<BinaryString name="Tags"></BinaryString>
 		</Properties>
-		<Item class="Folder" referent="RBXAF3F00A18D4B4C6CB03962F5BF1D2338">
+		<Item class="Folder" referent="RBX3178B35176E54F1AA61CCC194C78154A">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -19,7 +19,7 @@
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
-			<Item class="ModuleScript" referent="RBX7B8FCB66810B4889916A72FCADAB0BFB">
+			<Item class="ModuleScript" referent="RBX4049048C755148499DD91603E2F08D71">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[--[[
@@ -39,6 +39,9 @@ export type Hook = (...any) -> nil
 export type HookType = "APIExtensionLoaded"|"APIExtensionUnloaded"|"PreSerialize"|"PreSerializeMissionSetup"|"SerializerUnloaded"
 export type APIExtension = { [string] : (...any) -> ...any }
 
+export type APINotifSev  = "MIN"|"INFO"|"WARN"|"ERR"|"ERR_SEVERE"|"MAX"|number
+export type APINotifData = { Title: string, Description: string, Severity: APINotifSev, Rich: boolean? }
+
 export type APIReference = {
 	-- Generic
 	GetAPIVersion 			: () -> number,
@@ -46,7 +49,8 @@ export type APIReference = {
 	GetAttributesMap 		: () -> { [string] : { [number] : any } },
 	GetAttributeTypes 		: () -> { [string] : number },
 	IsAPIThread				: (thread) -> boolean,
-	GetRegistrantFactory	: (author: string, plugin: string) -> ((hookName: string) -> string), 
+	GetRegistrantFactory	: (author: string, plugin: string) -> ((hookName: string) -> string),
+	PushNotification		: (notif_data: APINotifData) -> boolean?,
 
 	-- HookTypes
 	GetHookTypes 			: () -> { [number] : string },
@@ -232,13 +236,15 @@ return APIConsumer]]></ProtectedString>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX0B0B8EE5804A468287FC76291C242DD5">
+			<Item class="ModuleScript" referent="RBX5A005C9122C040C88BE139D2CF117E51">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
 
 local attributesMap = require(script.Parent.Parent.AttributesMap)
 local featureCheck = require(script.Parent.Parent.Util.FeatureCheck)
+
+local notifMan = require(script.Parent.Parent.Util.Notifications.Manager)
 
 local internalAPI = {}
 internalAPI.APIExtensions = {}
@@ -257,6 +263,14 @@ internalAPI.ProtectedStateKeys = {
 	Present = true,
 	Done = false
 }
+
+local function truncateString(str, to)
+	if #str > to then
+		return str:sub(1, to) .. "..."
+	else
+		return str
+	end
+end
 
 local wait_event = Instance.new("BindableEvent")
 internalAPI.StateCommands = {
@@ -454,7 +468,7 @@ internalAPI.InvokeHook = function(hookType, ...)
 			local success, stateOut, arg1 = co_xpcall(hookCoroutine, arg_merge(unpack(hook.CMD_Result), hook.CallbackState, invokeStatePublic, ...))
 			internalAPI.RunningThread = nil
 
-			if type(stateOut) == "string" then
+			if success and type(stateOut) == "string" then
 				stateOut = stateOut:upper()
 			else
 				hook.CMD_Result = {}
@@ -483,7 +497,13 @@ internalAPI.InvokeHook = function(hookType, ...)
 			elseif success and coroutine.status(hookCoroutine) == "dead" then
 				invokeState[hook.Registrant].Done = true
 			elseif not success then
-				warn(`Error encountered when running {hookType}Hook {hook.Registrant} - {stateVals}`)
+				warn(`Error encountered when running {hookType}Hook {hook.Registrant} - {stateOut}`)
+				notifMan.Push{
+					Title = `Plugin Error ({truncateString(hook.Registrant, 16)})`,
+					Description = `{hookType}Hook {hook.Registrant} experienced an error. Check the Script Output window for details.\n\n` .. 
+								  `MiniError:\n{truncateString(stateOut, 32)}`,
+					Severity = "WARN"
+				}
 			end
 		end
 
@@ -495,6 +515,12 @@ internalAPI.InvokeHook = function(hookType, ...)
 		for _, hook in ipairs(unfinishedHooks) do
 			warn(`\t{hook.Registrant}`)
 		end
+		notifMan.Push{
+			Title = "Plugin Error",
+			Description = `{#unfinishedHooks} {hookType}Hook plugins failed to finish execution!\n` .. 
+						  "Please check your Script Output window.",
+			Severity = "WARN"
+		}
 	end
 
 end
@@ -555,7 +581,7 @@ return internalAPI]]></ProtectedString>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX498B31ACAE994A4EA0D5593ACE35DD0C">
+			<Item class="ModuleScript" referent="RBXD3C0D63EA13C4E7F80EF5422F65A0B3B">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local coreGui = game:GetService("CoreGui")
@@ -647,14 +673,19 @@ return serializerAPI
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX8ABC1068910C49109EF1109E253DF216">
+			<Item class="ModuleScript" referent="RBX8CA8CDDE1705414FAC800CD7B664AFA6">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
-					<ProtectedString name="Source"><![CDATA[local attributesMap = require(script.Parent.Parent.AttributesMap)
+					<ProtectedString name="Source"><![CDATA[local httpService = game:GetService("HttpService")
+
+local attributesMap = require(script.Parent.Parent.AttributesMap)
 local attributeTypes = require(script.Parent.Parent.PropAttributeTypes)
 local versionCfg = require(script.Parent.Parent.Util.VersionConfig)
 
+local notificationMan = require(script.Parent.Parent.Util.Notifications.Manager)
 local internalAPI = require(script.Parent.Internal)
+
+local apiThread = coroutine.running()
 
 local function ValidateArgTypes(fname, ...)
 	local args = {...}
@@ -678,6 +709,28 @@ local function ValidateArgTypes(fname, ...)
 		end
 	end
 	return true
+end
+
+local function ValidateTableShape(fname, tbl, expected)
+	local keysMatch = true
+	local keyBad = nil
+
+	local argSettings = {}
+	for k, v in pairs(tbl) do
+		if expected[k] == nil then
+			keysMatch = false
+			keyBad = k
+			break
+		end
+		argSettings[#argSettings+1] = { k, v, expected[k] }
+	end
+
+	if not keysMatch then
+		warn(`Invalid table key {keyBad} passed to API function {fname}!`)
+		return false
+	end
+
+	return ValidateArgTypes(fname, unpack(argSettings))
 end
 
 type APIExtension = { [string] : (...any) -> ...any }
@@ -785,9 +838,32 @@ end
 
 --[[
 	[Args]
+		     Title // Description                                     // Example                                                                                       //
+		---------- // ----------------------------------------------- // -------------- -------------------------------------------------------------------------------//
+		notif_data // Table describing the relevant notification data // { Title = "Hello, World!", Description = "This is my first notification", Severity = "INFO" } //
+	[Returns]
+		1 - Nil if notification data did not pass validation
+			If notif data *did* pass validation, then returns a boolean indicating if the notification was displayed or not
+]]
+function publicAPI.PushNotification(notif_data) : boolean?
+	if not ValidateTableShape(
+		"PushNotification",
+		notif_data,
+		{
+			Title = "string",
+			Description = "string",
+			Severity = "number|string",
+			Rich = "boolean?"
+		}
+	) then return nil end
+	return notificationMan.Push(notif_data)
+end
+
+--[[
+	[Args]
 		     Title // Description                                                                       // Example                                   //
 		---------- // --------------------------------------------------------------------------------- // ----------------------------------------- //
-		  hookType // String corresponding to the type of hook being added                              // "PreSerialize"                            //
+		  hookType // String corresponding to the type of hook being removed                            // "PreSerialize"                            //
 		registrant // String representing the source of the hook. Should be unique                      // "MyPlugin"                                //
 		      hook // Function to be invoked when the corresponding hookType is invoked                 // function() print("Hook!") end             //
 		 hookState // (Optional) Extra state to be passed as the last argument to the hook when invoked // { PartCol = Color3.fromHex("#FFFFFF") }   //
@@ -912,7 +988,7 @@ return table.freeze(publicAPI)]]></ProtectedString>
 				</Properties>
 			</Item>
 		</Item>
-		<Item class="ModuleScript" referent="RBX297EC3AE34CF48478CDFA0DC5B8EE7E6">
+		<Item class="ModuleScript" referent="RBX81BCE026E9BF457A941014A9FCC353A9">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local AttributesMap = require(script.Parent.AttributesMap)
@@ -951,6 +1027,9 @@ local GlobalPropAttributes = {
 	TagButton = { PropAttributeTypes.EXPRESSION, nil },
 	MultiGlass = { PropAttributeTypes.BOOL, nil },
 	BreakAlarm = { PropAttributeTypes.STRING, nil },
+	BlockEMP = { PropAttributeTypes.EXPRESSION, nil },
+	EMPHitVariable = { PropAttributeTypes.STATE_VALUE, nil },
+	PowerCutVariable = { PropAttributeTypes.STATE_VALUE, nil },
 }
 
 local testAttributeCompatibility = function(attributeType, value, objectName, attributeName)
@@ -1063,7 +1142,9 @@ local testAttributeCompatibility = function(attributeType, value, objectName, at
 			return true
 		end
 		local num = tonumber(value)
-		if num == math.round(num) and num >= 1 and num <= 999 then
+		if not num then -- Expressions are valid
+			return true
+		elseif num and num == math.round(num) and num >= 1 and num <= 999 then
 			return true
 		else
 			warn(
@@ -1237,7 +1318,7 @@ return {
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX95BCD7C2FC274DFDA541BEB6A8994F80">
+		<Item class="ModuleScript" referent="RBX98B39B7BEBA145D0B8FE02FE5F0E79F3">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[-- NOTE: Do not edit this file manually. Use PropCompiler.py.
@@ -1245,7 +1326,7 @@ AttributeType = require(script.Parent.PropAttributeTypes)
 return {
 	AccessPoint = {
 		NetworkId = {AttributeType.NETWORK_ID, 1},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		NetworkLink = {AttributeType.NETWORK_ID_STRING, ""},
 		TriggerInvestigation = {AttributeType.EXPRESSION, true},
 	},
@@ -1253,7 +1334,7 @@ return {
 	},
 	BadgeReader = {
 		TriggerVariable = {AttributeType.STATE_VALUE, ""},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		CustomBadges = {AttributeType.STRING, ""},
 		UseITBadge = {AttributeType.BOOL, false},
 		UseLeadSecurityBadge = {AttributeType.BOOL, false},
@@ -1267,12 +1348,17 @@ return {
 	},
 	BoxStack2 = {
 	},
+	CameraBox = {
+		CamerasWatched = {AttributeType.EXPRESSION, ""},
+		CameraBoxId = {AttributeType.STRING, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
+	},
 	CandlePlate = {
 	},
 	CardboardBox = {
 	},
 	CardReader = {
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		TriggerVariable = {AttributeType.STATE_VALUE, ""},
 		ValidCards = {AttributeType.STRING, ""},
 		MinimumCard = {AttributeType.STRING, ""},
@@ -1282,7 +1368,7 @@ return {
 	},
 	CeilingAccessPoint = {
 		NetworkId = {AttributeType.NETWORK_ID, 1},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		NetworkLink = {AttributeType.NETWORK_ID_STRING, ""},
 		TriggerInvestigation = {AttributeType.EXPRESSION, true},
 	},
@@ -1290,6 +1376,7 @@ return {
 		ClientExaminedVariable = {AttributeType.STATE_VALUE, ""},
 		ExaminedVariable = {AttributeType.STATE_VALUE, ""},
 		RewiredVariable = {AttributeType.STATE_VALUE, ""},
+		ClientRewiredVariable = {AttributeType.STATE_VALUE, ""},
 	},
 	ClientExplosionEffect = {
 		Active = {AttributeType.EXPRESSION, ""},
@@ -1305,7 +1392,7 @@ return {
 		SocialEngineeringLevel = {AttributeType.EXPRESSION, 0},
 	},
 	CodeCardReader = {
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		TriggerVariable = {AttributeType.STATE_VALUE, ""},
 		ValidCards = {AttributeType.STRING, ""},
 		CodeVariable = {AttributeType.STATE_VALUE, ""},
@@ -1319,7 +1406,7 @@ return {
 		AltPromptSwitchTime = {AttributeType.NUMBER, 1},
 	},
 	CodeKeypad = {
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		TriggerVariable = {AttributeType.STATE_VALUE, ""},
 		CodeRevealedVariable = {AttributeType.STATE_VALUE, ""},
 		PromptText = {AttributeType.STRING, ""},
@@ -1334,6 +1421,9 @@ return {
 		CodeSeed = {AttributeType.INT, 1},
 		InteractionAlertLevel = {AttributeType.EXPRESSION, ""},
 		PowerCutVariable = {AttributeType.STATE_VALUE, ""},
+		CodeInputVariable = {AttributeType.STATE_VALUE, ""},
+		NoRewire = {AttributeType.BOOL, false},
+		PanelOpenCondition = {AttributeType.EXPRESSION, ""},
 	},
 	CombatCuttableFence = {
 	},
@@ -1424,11 +1514,13 @@ return {
 		AngleDown = {AttributeType.NUMBER, 0},
 		Wireless = {AttributeType.BOOL, true},
 		CamNumber = {AttributeType.INT, 0},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		DetectionSpeed = {AttributeType.NUMBER, 1},
 		LocationKey = {AttributeType.STRING, ""},
 		MapFloorOffset = {AttributeType.INT, 0},
 		WarpPoint = {AttributeType.STRING, nil},
+		CameraBoxId = {AttributeType.STRING, ""},
+		StatusVariable = {AttributeType.STATE_VALUE, nil},
 	},
 	DoorArmored = {
 		LockBack = {AttributeType.EXPRESSION, false},
@@ -1459,6 +1551,7 @@ return {
 		OpenVariable = {AttributeType.STATE_VALUE, ""},
 		AlarmDelayed = {AttributeType.BOOL, nil},
 		OpenWhileAlarmedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
 	},
 	DoorArmoredElectronic = {
 		LockBack = {AttributeType.EXPRESSION, false},
@@ -1489,6 +1582,8 @@ return {
 		OpenVariable = {AttributeType.STATE_VALUE, ""},
 		AlarmDelayed = {AttributeType.BOOL, nil},
 		OpenWhileAlarmedVariable = {AttributeType.STATE_VALUE, nil},
+		LockedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
 	},
 	DoorCombatSpawn = {
 		LockBack = {AttributeType.EXPRESSION, false},
@@ -1514,6 +1609,40 @@ return {
 		BotRelockCondition = {AttributeType.EXPRESSION, ""},
 		KeepClosed = {AttributeType.INT, 0},
 		KnockResponder = {AttributeType.STRING, ""},
+		LockedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
+	},
+	DoorFenceGate = {
+		LockBack = {AttributeType.EXPRESSION, false},
+		LockFront = {AttributeType.EXPRESSION, false},
+		DoubleDoor = {AttributeType.EXPRESSION, false},
+		RemoteUnlock = {AttributeType.EXPRESSION, ""},
+		PathIgnoreUnlocked = {AttributeType.INT, 0},
+		PathIgnoreOpen = {AttributeType.INT, 0},
+		PathIgnoreBroken = {AttributeType.INT, 0},
+		PathRecover = {AttributeType.INT, 0},
+		BotCloseCondition = {AttributeType.EXPRESSION, ""},
+		Blocked = {AttributeType.EXPRESSION, ""},
+		BlockedFromDirection = {AttributeType.EXPRESSION, nil},
+		NoKick = {AttributeType.EXPRESSION, false},
+		AutoLock = {AttributeType.EXPRESSION, false},
+		PathReq1 = {AttributeType.STRING, ""},
+		PathReq2 = {AttributeType.STRING, ""},
+		Access = {AttributeType.STRING, ""},
+		FailsafeUnlock = {AttributeType.EXPRESSION, ""},
+		DifficultLock = {AttributeType.EXPRESSION, false},
+		AlarmVariable = {AttributeType.STATE_VALUE, ""},
+		AlarmDisabled = {AttributeType.EXPRESSION, ""},
+		BotRelockCondition = {AttributeType.EXPRESSION, ""},
+		KeepClosed = {AttributeType.INT, 0},
+		KnockResponder = {AttributeType.STRING, nil},
+		KnockChatResponse = {AttributeType.STRING, nil},
+		HoldDirection = {AttributeType.EXPRESSION, ""},
+		OpenVariable = {AttributeType.STATE_VALUE, ""},
+		AlarmDelayed = {AttributeType.BOOL, nil},
+		OpenWhileAlarmedVariable = {AttributeType.STATE_VALUE, nil},
+		LockedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
 	},
 	DoorGlass = {
 		LockBack = {AttributeType.EXPRESSION, false},
@@ -1544,6 +1673,8 @@ return {
 		OpenVariable = {AttributeType.STATE_VALUE, ""},
 		AlarmDelayed = {AttributeType.BOOL, nil},
 		OpenWhileAlarmedVariable = {AttributeType.STATE_VALUE, nil},
+		LockedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
 	},
 	DoorGlassFramed = {
 		LockBack = {AttributeType.EXPRESSION, false},
@@ -1574,6 +1705,8 @@ return {
 		OpenVariable = {AttributeType.STATE_VALUE, ""},
 		AlarmDelayed = {AttributeType.BOOL, nil},
 		OpenWhileAlarmedVariable = {AttributeType.STATE_VALUE, nil},
+		LockedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
 	},
 	DoorGlassRustic = {
 		LockBack = {AttributeType.EXPRESSION, false},
@@ -1604,6 +1737,8 @@ return {
 		OpenVariable = {AttributeType.STATE_VALUE, ""},
 		AlarmDelayed = {AttributeType.BOOL, nil},
 		OpenWhileAlarmedVariable = {AttributeType.STATE_VALUE, nil},
+		LockedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
 	},
 	DoorMetal = {
 		LockBack = {AttributeType.EXPRESSION, false},
@@ -1637,6 +1772,8 @@ return {
 		OpenVariable = {AttributeType.STATE_VALUE, ""},
 		AlarmDelayed = {AttributeType.BOOL, nil},
 		OpenWhileAlarmedVariable = {AttributeType.STATE_VALUE, nil},
+		LockedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
 	},
 	DoorMetalElectronic = {
 		LockBack = {AttributeType.EXPRESSION, false},
@@ -1666,8 +1803,11 @@ return {
 		KnockChatResponse = {AttributeType.STRING, nil},
 		HoldDirection = {AttributeType.EXPRESSION, ""},
 		OpenVariable = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		AlarmDelayed = {AttributeType.BOOL, nil},
 		OpenWhileAlarmedVariable = {AttributeType.STATE_VALUE, nil},
+		LockedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
 	},
 	DoorPushLeft = {
 		LockBack = {AttributeType.EXPRESSION, false},
@@ -1698,6 +1838,8 @@ return {
 		HoldDirection = {AttributeType.EXPRESSION, ""},
 		AlarmDelayed = {AttributeType.BOOL, nil},
 		OpenWhileAlarmedVariable = {AttributeType.STATE_VALUE, nil},
+		LockedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
 	},
 	DoorWood = {
 		LockBack = {AttributeType.EXPRESSION, false},
@@ -1728,6 +1870,8 @@ return {
 		OpenVariable = {AttributeType.STATE_VALUE, ""},
 		AlarmDelayed = {AttributeType.BOOL, nil},
 		OpenWhileAlarmedVariable = {AttributeType.STATE_VALUE, nil},
+		LockedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
 	},
 	DoorWoodElectronic = {
 		LockBack = {AttributeType.EXPRESSION, false},
@@ -1758,6 +1902,8 @@ return {
 		OpenVariable = {AttributeType.STATE_VALUE, ""},
 		AlarmDelayed = {AttributeType.BOOL, nil},
 		OpenWhileAlarmedVariable = {AttributeType.STATE_VALUE, nil},
+		LockedVariable = {AttributeType.STATE_VALUE, nil},
+		LockOnClose = {AttributeType.EXPRESSION, nil},
 	},
 	DoubleVaultDoor = {
 		OpenCondition = {AttributeType.EXPRESSION, ""},
@@ -1768,11 +1914,11 @@ return {
 		CallVariable = {AttributeType.STATE_VALUE, ""},
 		DisabledInCombat = {AttributeType.BOOL, false},
 		Active = {AttributeType.EXPRESSION, ""},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 	},
 	ElevatorCardReader = {
 		TriggerVariable = {AttributeType.STATE_VALUE, ""},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		DisabledInCombat = {AttributeType.BOOL, false},
 		RewiredVariable = {AttributeType.STATE_VALUE, ""},
 	},
@@ -1786,12 +1932,27 @@ return {
 		CanShoot = {AttributeType.BOOL, false},
 		LoweredVariable = {AttributeType.STATE_VALUE, ""},
 	},
+	FilingCabinetLockable = {
+		SearchTime = {AttributeType.NUMBER, nil},
+		SearchVariable = {AttributeType.STATE_VALUE, ""},
+		KeyInLock = {AttributeType.EXPRESSION, false},
+		TriggerTag = {AttributeType.STRING, nil},
+		Locked = {AttributeType.EXPRESSION, false},
+		HideRightContents = {AttributeType.EXPRESSION, ""},
+		HideLeftContents = {AttributeType.EXPRESSION, ""},
+	},
 	Flare = {
 		PlacedVariable = {AttributeType.STATE_VALUE, FlarePlaced},
 	},
 	FloorAccessCover = {
 		CanOpen = {AttributeType.EXPRESSION, ""},
 		OpenedVariable = {AttributeType.STATE_VALUE, ""},
+	},
+	FloorGrate = {
+		ThermiteUsedVariable = {AttributeType.STATE_VALUE, ""},
+		OpenedVariable = {AttributeType.STATE_VALUE, ""},
+		Reinforced = {AttributeType.EXPRESSION, nil},
+		OpeningVariable = {AttributeType.STATE_VALUE, ""},
 	},
 	Flowerpot = {
 		Seed = {AttributeType.INT, 0},
@@ -1811,6 +1972,7 @@ return {
 		Item = {AttributeType.STRING, ""},
 		ItemTagString = {AttributeType.STRING, ""},
 		KeyItem = {AttributeType.BOOL, false},
+		C4Item = {AttributeType.STRING, nil},
 	},
 	GarageDoor = {
 		Height = {AttributeType.EXPRESSION, "0"},
@@ -1820,7 +1982,7 @@ return {
 	HackableComputer = {
 		MonitorOffset = {AttributeType.VECTOR3, Vector3.new(0, 0, 0)},
 		MonitorAngle = {AttributeType.NUMBER, 0},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		ScreenText = {AttributeType.EXPRESSION, ""},
 		DesktopTransparency = {AttributeType.NUMBER, 0},
 		NetworkId = {AttributeType.NETWORK_ID, 0},
@@ -1847,6 +2009,12 @@ return {
 		PoliceShutdownVariable = {AttributeType.STATE_VALUE, ""},
 		QuadBlade = {AttributeType.BOOL, false},
 	},
+	HelicopterGunship = {
+		ShotDownVariable = {AttributeType.STATE_VALUE, ""},
+		HealthPerPlayer = {AttributeType.NUMBER, 2000},
+		SpawnVariance = {AttributeType.NUMBER, 0},
+		PathId = {AttributeType.STRING, ""},
+	},
 	HiddenWallSafe = {
 		PromptVisible = {AttributeType.EXPRESSION, ""},
 		Item = {AttributeType.STRING, ""},
@@ -1871,7 +2039,7 @@ return {
 		ReinforcedColor1 = {AttributeType.OPTIONAL_MISSION_COLOR, Color3.new(1, 1, 1)},
 	},
 	HighSecurityCardReader = {
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		TriggerVariable = {AttributeType.STATE_VALUE, ""},
 		ValidCards = {AttributeType.STRING, ""},
 		MinimumCard = {AttributeType.STRING, ""},
@@ -1884,6 +2052,18 @@ return {
 		BoxSeed = {AttributeType.INT, 0},
 		BoxDensity = {AttributeType.NUMBER, 0},
 		BoxColor = {AttributeType.OPTIONAL_MISSION_COLOR, Color3.new(0, 0, 0)},
+	},
+	InsertCardReader = {
+		CorrectCard = {AttributeType.STRING, ""},
+		PossibleCards = {AttributeType.STRING, ""},
+		TriggerVariable = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
+		UsedIncorrectCardVariable = {AttributeType.STATE_VALUE, ""},
+		TamperingAlarmRaiseWarning = {AttributeType.EXPRESSION, nil},
+		TamperingAlarmRaisePossibleWarning = {AttributeType.EXPRESSION, nil},
+		IncorrectCardAlarmRaiseWarning = {AttributeType.EXPRESSION, nil},
+		IncorrectCardAlarmRaisePossibleWarning = {AttributeType.EXPRESSION, nil},
+		TamperingVariable = {AttributeType.STATE_VALUE, ""},
 	},
 	InteractionBlocker = {
 		ServerActive = {AttributeType.EXPRESSION, "1"},
@@ -1924,6 +2104,8 @@ return {
 		ManualPasswordVariable = {AttributeType.STATE_VALUE, ""},
 		ManualPasswordList = {AttributeType.STRING, ""},
 		ManualPasswordRevealed = {AttributeType.EXPRESSION, ""},
+		MultiHackTitle = {AttributeType.STRING, nil},
+		HideUnavailablePrimaryHacks = {AttributeType.BOOL, nil},
 	},
 	LaptopOld = {
 		DesktopBackground = {AttributeType.STRING, ""},
@@ -1938,6 +2120,15 @@ return {
 		ManualPasswordVariable = {AttributeType.STATE_VALUE, ""},
 		ManualPasswordList = {AttributeType.STRING, ""},
 		ManualPasswordRevealed = {AttributeType.EXPRESSION, ""},
+	},
+	LargeButton = {
+		TriggerVariable = {AttributeType.STATE_VALUE, ""},
+		Active = {AttributeType.EXPRESSION, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
+		SubtitleKey = {AttributeType.STRING, ""},
+		TitleKey = {AttributeType.STRING, ""},
+		BlockReason = {AttributeType.EXPRESSION, ""},
+		AlarmRaise = {AttributeType.EXPRESSION, ""},
 	},
 	LaundryBasket = {
 		Active = {AttributeType.EXPRESSION, ""},
@@ -1979,14 +2170,14 @@ return {
 	MinimapBlock = {
 	},
 	Monitor = {
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		ScreenText = {AttributeType.EXPRESSION, ""},
 		DesktopTransparency = {AttributeType.NUMBER, 0},
 		DesktopBackground = {AttributeType.STRING, ""},
 	},
 	NetworkSwitch = {
 		NetworkId = {AttributeType.NETWORK_ID, 1},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		NetworkLink = {AttributeType.NETWORK_ID_STRING, ""},
 		TriggerInvestigation = {AttributeType.EXPRESSION, true},
 	},
@@ -1994,7 +2185,7 @@ return {
 		BlockPickups = {AttributeType.BOOL, false},
 	},
 	OldMonitor = {
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		ScreenText = {AttributeType.EXPRESSION, ""},
 		DesktopTransparency = {AttributeType.NUMBER, 0},
 		DesktopBackground = {AttributeType.STRING, ""},
@@ -2006,13 +2197,20 @@ return {
 		SetMetaTagsOnWarp = {AttributeType.STRING, nil},
 		ConfrontationDialogue = {AttributeType.STRING, nil},
 	},
+	PhotoPoint = {
+		PhotoZone = {AttributeType.STRING, ""},
+		Visible = {AttributeType.EXPRESSION, ""},
+		IncrementVariable = {AttributeType.STATE_VALUE, ""},
+		MaxRange = {AttributeType.NUMBER, ""},
+		ClientVariable = {AttributeType.STATE_VALUE, ""},
+	},
 	PortableMetalDetector = {
 		PowerLevel = {AttributeType.EXPRESSION, ""},
 	},
 	PowerBoxLarge = {
 		TagWhileActive = {AttributeType.BOOL, false},
 		AllowDisabling = {AttributeType.EXPRESSION, "1"},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		CombatDisableTarget = {AttributeType.EXPRESSION, ""},
 		NoPropDamage = {AttributeType.EXPRESSION, ""},
 		AllowRestoring = {AttributeType.EXPRESSION, "1"},
@@ -2022,7 +2220,7 @@ return {
 	PowerBoxPortable = {
 		TagWhileActive = {AttributeType.BOOL, false},
 		AllowDisabling = {AttributeType.EXPRESSION, "1"},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		CombatDisableTarget = {AttributeType.EXPRESSION, ""},
 		NoPropDamage = {AttributeType.EXPRESSION, ""},
 		AllowRestoring = {AttributeType.EXPRESSION, "1"},
@@ -2035,11 +2233,11 @@ return {
 	PowerBoxSmall = {
 		TagWhileActive = {AttributeType.BOOL, false},
 		AllowDisabling = {AttributeType.EXPRESSION, "1"},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		CombatDisableTarget = {AttributeType.EXPRESSION, ""},
 		NoPropDamage = {AttributeType.EXPRESSION, ""},
 		AllowRestoring = {AttributeType.EXPRESSION, "1"},
-		Locked = {AttributeType.BOOL, false},
+		Locked = {AttributeType.EXPRESSION, false},
 		ObjectName = {AttributeType.STRING, ""},
 		PowerAreaParent = {AttributeType.STATE_VALUE, ""},
 		ManualInvestigationBot = {AttributeType.EXPRESSION, ""},
@@ -2057,6 +2255,8 @@ return {
 		DistractionSubtitle = {AttributeType.STRING, ""},
 		DistractionSuspicious = {AttributeType.EXPRESSION, ""},
 		Enabled = {AttributeType.EXPRESSION, "1"},
+	},
+	RadioStationV2 = {
 	},
 	ScalablePlanter = {
 		PlantHeight = {AttributeType.NUMBER, 3},
@@ -2083,23 +2283,25 @@ return {
 		AngleDown = {AttributeType.NUMBER, 0},
 		Wireless = {AttributeType.BOOL, true},
 		CamNumber = {AttributeType.INT, 0},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		DetectionSpeed = {AttributeType.NUMBER, 1},
 		LocationKey = {AttributeType.STRING, ""},
 		MapFloorOffset = {AttributeType.INT, 0},
 		CycleTime = {AttributeType.NUMBER, 0},
 		WarpPoint = {AttributeType.STRING, nil},
+		CameraBoxId = {AttributeType.STRING, ""},
 	},
 	ServerRack = {
-		CanPickup = {AttributeType.BOOL, false},
+		CanPickup = {AttributeType.EXPRESSION, false},
 		ItemTagString = {AttributeType.STRING, ""},
 		PickupVariable = {AttributeType.STATE_VALUE, ""},
 		PowerArea = {AttributeType.STRING, ""},
+		UseLargeServer = {AttributeType.EXPRESSION, false},
 	},
 	ServerRackWideTerminal = {
 		NetworkId = {AttributeType.NETWORK_ID, 1},
 		NetworkLink = {AttributeType.NETWORK_ID_STRING, ""},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		Disconnected = {AttributeType.EXPRESSION, ""},
 		DesktopTransparency = {AttributeType.NUMBER, 0},
 		DesktopBackground = {AttributeType.STRING, ""},
@@ -2115,12 +2317,18 @@ return {
 		SecurityKeyNeeded = {AttributeType.EXPRESSION, ""},
 		SecurityKeyInsertedVariable = {AttributeType.STATE_VALUE, ""},
 	},
+	SlidingBlastDoor = {
+		OpenDist = {AttributeType.NUMBER, 4.5},
+		IsOpen = {AttributeType.EXPRESSION, ""},
+	},
+	Speedboat = {
+	},
 	StaticAmmoBox = {
 	},
 	SurfaceText = {
 		TextKey = {AttributeType.STRING, ""},
 		Font = {AttributeType.STRING, ""},
-		HorizontalAlignment = {AttributeType.INT, 2},
+		HorizontalAlignment = {AttributeType.NUMBER, 2},
 		TextColor3 = {AttributeType.OPTIONAL_MISSION_COLOR, Color3.new(1, 1, 1)},
 	},
 	TableGlass = {
@@ -2142,7 +2350,7 @@ return {
 		TimelockEnabled = {AttributeType.EXPRESSION, ""},
 		SetState = {AttributeType.STATE_VALUE, ""},
 		CountTime = {AttributeType.NUMBER, 60},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		SetValue = {AttributeType.EXPRESSION, ""},
 	},
 	TrespassZoneDisplay = {
@@ -2172,6 +2380,8 @@ return {
 		Disguise = {AttributeType.STRING, nil},
 		SetMetaTags = {AttributeType.STRING, nil},
 		PlayersOutsideZoneVariable = {AttributeType.STATE_VALUE, ""},
+		PhotoZone = {AttributeType.STRING, nil},
+		AllPlayersInZoneVariable = {AttributeType.STATE_VALUE, ""},
 	},
 	TutorialText = {
 		HorizontalOffset = {AttributeType.NUMBER, 0.5},
@@ -2215,9 +2425,12 @@ return {
 		StateValue = {AttributeType.STATE_VALUE, nil},
 		StateVariable = {AttributeType.STATE_VALUE, ""},
 		GlassColor = {AttributeType.OPTIONAL_MISSION_COLOR, Color3.new(0, 0, 0)},
+		GlassTransparency = {AttributeType.NUMBER, nil},
+		GlassMaterial = {AttributeType.STRING, nil},
 		NoFrame = {AttributeType.BOOL, false},
 		SlideOpen = {AttributeType.EXPRESSION, ""},
 		SlideDist = {AttributeType.NUMBER, 0},
+		CutOpen = {AttributeType.EXPRESSION, nil},
 	},
 	WindowClimb = {
 		Blocked = {AttributeType.EXPRESSION, ""},
@@ -2232,7 +2445,23 @@ return {
 	},
 	WoodTargetWithSensor = {
 	},
+	BookcaseOnRails = {
+		ClientVisible = {AttributeType.EXPRESSION, ""},
+		BookPlaced = {AttributeType.EXPRESSION, ""},
+	},
+	BotBarrier = {
+	},
+	ClientPropsList = {
+	},
 	LandscapePhotoIds = {
+	},
+	MilitaryFootlocker = {
+		Contents = {AttributeType.STRING, ""},
+		SearchedVariable = {AttributeType.STATE_VALUE, ""},
+		HiddenContentsRevealedNotification = {AttributeType.STRING, ""},
+		HiddenContents = {AttributeType.STRING, ""},
+		HiddenContentsRevealedOnSearch = {AttributeType.EXPRESSION, ""},
+		HiddenContentsRevealedVariable = {AttributeType.STATE_VALUE, ""},
 	},
 	AccessRequestNode = {
 		ServerCondition = {AttributeType.EXPRESSION, ""},
@@ -2275,10 +2504,15 @@ return {
 		ColorHex = {AttributeType.STRING, "FFFFFF"},
 	},
 	BiometricLock = {
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		UsedVariable = {AttributeType.STATE_VALUE, ""},
 		BotServerTag = {AttributeType.STRING, ""},
 		RewireEnabled = {AttributeType.EXPRESSION, ""},
+	},
+	BlinkingLight = {
+		PowerArea = {AttributeType.EXPRESSION, ""},
+		BlinkTime = {AttributeType.NUMBER, 0.5},
+		Active = {AttributeType.EXPRESSION, ""},
 	},
 	BotConversationPoint = {
 		BotTag0 = {AttributeType.STRING, ""},
@@ -2319,6 +2553,8 @@ return {
 	Cabinet = {
 		BodyHiddenVariable = {AttributeType.STATE_VALUE, ""},
 	},
+	CombatRetreatPoint = {
+	},
 	ConditionalHighJumpRequired = {
 		Climber3Condition = {AttributeType.EXPRESSION, 1},
 		Color = {AttributeType.OPTIONAL_MISSION_COLOR, Color3.new(0, 0, 0)},
@@ -2338,9 +2574,21 @@ return {
 		MaxAlert = {AttributeType.INT, 3},
 		NotificationMessage = {AttributeType.STRING, ""},
 		ReportDialogue = {AttributeType.STRING, ""},
+		ReportedVariable = {AttributeType.STATE_VALUE, ""},
 	},
 	DebugSpawnLocation = {
 		Active = {AttributeType.BOOL, false},
+	},
+	DeployableShieldCover = {
+		AllowSpawning = {AttributeType.EXPRESSION, false},
+		Enabled = {AttributeType.EXPRESSION, true},
+		SpawnsIgnoreProximity = {AttributeType.BOOL, false},
+		UseFromAdjacentRoom = {AttributeType.BOOL, false},
+		HoldDoor = {AttributeType.BOOL, false},
+		ReverseDoor = {AttributeType.BOOL, false},
+		CoverTag = {AttributeType.STRING, ""},
+		HoldPriority = {AttributeType.EXPRESSION, 0},
+		OnlyAssignFromSpawner = {AttributeType.BOOL, false},
 	},
 	DynamicNode = {
 		Id = {AttributeType.STRING, ""},
@@ -2349,6 +2597,8 @@ return {
 		CaptureBot = {AttributeType.EXPRESSION, nil},
 		ApproachPace = {AttributeType.INT, nil},
 		CustomBehavior = {AttributeType.STRING, nil},
+		CapturePriority = {AttributeType.INT, 0},
+		CapturePolling = {AttributeType.BOOL, false},
 	},
 	ElevatorFunctional = {
 		OpenCondition = {AttributeType.EXPRESSION, ""},
@@ -2363,6 +2613,10 @@ return {
 	},
 	EscapeZone = {
 		Active = {AttributeType.EXPRESSION, ""},
+	},
+	ExplosiveBreachCharge = {
+	},
+	ExplosiveBreachPoint = {
 	},
 	FlowStart = {
 	},
@@ -2393,12 +2647,18 @@ return {
 	GuardCombatNode = {
 		BotTag = {AttributeType.STRING, nil},
 	},
+	HelicopterCrashPoint = {
+		PathId = {AttributeType.STRING, ""},
+	},
+	HelicopterPathPoint = {
+		PathId = {AttributeType.STRING, ""},
+	},
 	init = {
 	},
 	IntercomCode = {
 		SocialEngineeringDialogue = {AttributeType.STRING, ""},
 		TriggerVariable = {AttributeType.STATE_VALUE, ""},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		HostageUse = {AttributeType.STATE_VALUE, ""},
 		PickupNode = {AttributeType.STRING, ""},
 		PickupVariable = {AttributeType.STATE_VALUE, ""},
@@ -2411,7 +2671,7 @@ return {
 	},
 	IntercomPanel = {
 		TriggerVariable = {AttributeType.STATE_VALUE, ""},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		Subtitle = {AttributeType.STRING, ""},
 		Title = {AttributeType.STRING, ""},
 	},
@@ -2440,6 +2700,10 @@ return {
 		MissingToolTitle = {AttributeType.STRING, ""},
 		Item = {AttributeType.STRING, ""},
 		SetMetaTags = {AttributeType.STRING, nil},
+	},
+	ItemDropPoint = {
+		DepositedVariable = {AttributeType.STATE_VALUE, ""},
+		ItemTag = {AttributeType.STRING, ""},
 	},
 	ItemSpawn = {
 		Item = {AttributeType.STRING, ""},
@@ -2501,6 +2765,8 @@ return {
 	},
 	MissionExit = {
 	},
+	ObjectInvestigationTrigger = {
+	},
 	PathfindingBlocker = {
 		BotCollisions = {AttributeType.BOOL, nil},
 	},
@@ -2527,14 +2793,24 @@ return {
 		Active = {AttributeType.EXPRESSION, true},
 	},
 	RewireablePanel = {
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		TriggerVariable = {AttributeType.STATE_VALUE, ""},
 		RewireEnabled = {AttributeType.EXPRESSION, "1"},
 		ObjectName = {AttributeType.STRING, ""},
 		DifficultRewire = {AttributeType.BOOL, false},
 	},
+	RFIDWriter = {
+		ValidItems = {AttributeType.STRING, ""},
+		NetworkId = {AttributeType.NETWORK_ID, ""},
+	},
+	SatelliteDish = {
+		PowerArea = {AttributeType.STRING, ""},
+		DamagedVariable = {AttributeType.STATE_VALUE, ""},
+		Health = {AttributeType.INT, 0},
+	},
 	SawCutPoint = {
 		UsedVariable = {AttributeType.STATE_VALUE, ""},
+		NoAutoBreak = {AttributeType.BOOL, false},
 	},
 	ScriptedEMP = {
 		BlastRadius = {AttributeType.NUMBER, 20},
@@ -2618,7 +2894,7 @@ return {
 	SwitchPanel = {
 		TriggerVariable = {AttributeType.STATE_VALUE, ""},
 		Active = {AttributeType.EXPRESSION, ""},
-		PowerArea = {AttributeType.STATE_VALUE, ""},
+		PowerArea = {AttributeType.EXPRESSION, ""},
 		SubtitleKey = {AttributeType.STRING, ""},
 		TitleKey = {AttributeType.STRING, ""},
 	},
@@ -2642,6 +2918,7 @@ return {
 		SawSubtitle = {AttributeType.STRING, ""},
 		SawTime = {AttributeType.NUMBER, 8},
 		SawXOffset = {AttributeType.NUMBER, 0},
+		SawGround = {AttributeType.BOOL, false},
 		ScrewdriverEnabled = {AttributeType.BOOL, false},
 		ScrewdriverSubtitle = {AttributeType.STRING, ""},
 		ScrewdriverTitle = {AttributeType.STRING, ""},
@@ -2657,6 +2934,7 @@ return {
 		Active = {AttributeType.EXPRESSION, ""},
 		PlayersInRoomVariable = {AttributeType.STATE_VALUE, ""},
 		ClientInRoomVariable = {AttributeType.STATE_VALUE, ""},
+		MaxRange = {AttributeType.NUMBER, nil},
 	},
 	TriggerRoomBot = {
 		BotServerTag = {AttributeType.STRING, ""},
@@ -2680,6 +2958,7 @@ return {
 		Active = {AttributeType.EXPRESSION, ""},
 	},
 	VisionBlocker = {
+		Active = {AttributeType.EXPRESSION, true},
 	},
 	WarpPoint = {
 		WarpPointId = {AttributeType.STRING, ""},
@@ -2692,6 +2971,10 @@ return {
 	AlarmedBehaviorOverride = {
 		BotServerTag = {AttributeType.STRING, ""},
 		CustomBehavior = {AttributeType.STRING, ""},
+	},
+	AlertLowerCondition = {
+		AlertLevel = {AttributeType.EXPRESSION, ""},
+		Condition = {AttributeType.EXPRESSION, ""},
 	},
 	AlertRaiseCondition = {
 		Amount = {AttributeType.INT, 1},
@@ -2757,6 +3040,9 @@ return {
 		Active = {AttributeType.EXPRESSION, ""},
 		SpawnCap = {AttributeType.EXPRESSION, 6},
 		CustomCombatData = {AttributeType.STRING, ""},
+		CustomShirtId = {AttributeType.STRING, nil},
+		CustomPantsId = {AttributeType.STRING, nil},
+		FallbackCondition = {AttributeType.EXPRESSION, nil},
 		EnemyWeaponsWave1 = {AttributeType.EXPRESSION, nil},
 		EnemyWeaponsWave2 = {AttributeType.EXPRESSION, nil},
 		EnemyWeaponsWave3 = {AttributeType.EXPRESSION, nil},
@@ -2769,6 +3055,11 @@ return {
 		CurrentWave = {AttributeType.EXPRESSION, nil},
 	},
 	CombatWaveSpawner = {
+	},
+	ConditionalBotTag = {
+		ApplyTag = {AttributeType.STRING, ""},
+		ReferenceTag = {AttributeType.STRING, ""},
+		Condition = {AttributeType.EXPRESSION, ""},
 	},
 	ConditionalStateUpdate = {
 		Watch = {AttributeType.EXPRESSION, ""},
@@ -2793,6 +3084,13 @@ return {
 		Disguise = {AttributeType.STRING, ""},
 		HostageOnly = {AttributeType.BOOL, false},
 		Label = {AttributeType.STRING, ""},
+		DialogueTree = {AttributeType.STRING, nil},
+		NextDialogueTree = {AttributeType.STRING, nil},
+		IncrementClientVariable = {AttributeType.STATE_VALUE, ""},
+		AdvancedProtocolLevel = {AttributeType.EXPRESSION, nil},
+		AwarenessLevel = {AttributeType.EXPRESSION, nil},
+		Priority = {AttributeType.EXPRESSION, nil},
+		DisableReason = {AttributeType.EXPRESSION, ""},
 	},
 	ConversationResponseCustomBehavior = {
 		BotServerTag = {AttributeType.STATE_VALUE, ""},
@@ -2815,6 +3113,10 @@ return {
 		EnemyWeapons = {AttributeType.STRING, "F57|S97|480 MCS"},
 		ServerTag = {AttributeType.STRING, nil},
 		CustomCombatData = {AttributeType.STRING, ""},
+		CustomShirtId = {AttributeType.STRING, nil},
+		CustomPantsId = {AttributeType.STRING, nil},
+		ShuffleCover = {AttributeType.BOOL, false},
+		FocusPoint = {AttributeType.VECTOR3, nil},
 		EnemyWeaponsWave1 = {AttributeType.EXPRESSION, nil},
 		EnemyWeaponsWave2 = {AttributeType.EXPRESSION, nil},
 		EnemyWeaponsWave3 = {AttributeType.EXPRESSION, nil},
@@ -2825,6 +3127,10 @@ return {
 		EnemyWeaponsWave8 = {AttributeType.EXPRESSION, nil},
 		EnemyWeaponsWave9 = {AttributeType.EXPRESSION, nil},
 		CurrentWave = {AttributeType.EXPRESSION, nil},
+	},
+	CredentialUnlock = {
+		Condition = {AttributeType.EXPRESSION, ""},
+		Credential = {AttributeType.STRING, ""},
 	},
 	CustomBehaviorCondition = {
 		Priority = {AttributeType.STRING, "Custom1"},
@@ -2837,7 +3143,7 @@ return {
 	},
 	CustomHack = {
 		DeployCost = {AttributeType.INT, 20},
-		DeployTime = {AttributeType.INT, 10},
+		DeployTime = {AttributeType.EXPRESSION, 10},
 		NodeId = {AttributeType.NETWORK_ID, 1},
 		NameKey = {AttributeType.STRING, ""},
 		SubtitleKey = {AttributeType.STRING, ""},
@@ -2906,7 +3212,7 @@ return {
 	},
 	IntelPrimaryText = {
 		Text = {AttributeType.STRING, ""},
-		BackgroundColor = {AttributeType.STRING, ""},
+		BackgroundColor = {AttributeType.OPTIONAL_MISSION_COLOR, ""},
 		Visible = {AttributeType.EXPRESSION, ""},
 		IntelNodeId = {AttributeType.STRING, ""},
 	},
@@ -2938,6 +3244,15 @@ return {
 		Delta = {AttributeType.EXPRESSION, 0.5},
 		AlwaysUpdate = {AttributeType.EXPRESSION, false},
 		UpdateClock = {AttributeType.EXPRESSION, "0"},
+	},
+	LocalChat = {
+		DelayStart = {AttributeType.NUMBER, 0},
+		Active = {AttributeType.EXPRESSION, ""},
+		Dialogue = {AttributeType.STRING, ""},
+		TriggerOnce = {AttributeType.BOOL, false},
+		StealthOnly = {AttributeType.BOOL, false},
+		CombatOnly = {AttributeType.BOOL, false},
+		Replicate = {AttributeType.BOOL, false},
 	},
 	MissionCompletionTrigger = {
 		Condition = {AttributeType.EXPRESSION, ""},
@@ -3000,6 +3315,8 @@ return {
 	SearchPatternCondition = {
 		Condition = {AttributeType.EXPRESSION, ""},
 		BotServerTag = {AttributeType.STRING, ""},
+		Pace = {AttributeType.NUMBER, nil},
+		UseWeapon = {AttributeType.BOOL, nil},
 	},
 	ServerChat = {
 		Active = {AttributeType.EXPRESSION, ""},
@@ -3013,6 +3330,16 @@ return {
 		Nodes = {AttributeType.STRING, ""},
 		InitialSpawns = {AttributeType.EXPRESSION, 0},
 		RespawnRate = {AttributeType.EXPRESSION, 20},
+	},
+	StandardRadioAlertReduction = {
+		AlertReductionDisabled = {AttributeType.EXPRESSION, ""},
+		AlertReductionDifficulty = {AttributeType.EXPRESSION, ""},
+		AlertResetDifficulty = {AttributeType.EXPRESSION, ""},
+	},
+	StateLock = {
+		Watch = {AttributeType.EXPRESSION, ""},
+		SetVariable = {AttributeType.STATE_VALUE, ""},
+		SetInternal = {AttributeType.STATE_VALUE, ""},
 	},
 	StateScript = {
 	},
@@ -3074,14 +3401,6 @@ return {
 		NodeId = {AttributeType.NETWORK_ID, 0},
 		ObjectiveType = {AttributeType.INT, 1},
 	},
-	LocalChat = {
-		DelayStart = {AttributeType.NUMBER, 0},
-		Active = {AttributeType.EXPRESSION, ""},
-		Dialogue = {AttributeType.STRING, ""},
-		TriggerOnce = {AttributeType.BOOL, false},
-		StealthOnly = {AttributeType.BOOL, false},
-		CombatOnly = {AttributeType.BOOL, false},
-	},
 	LocalStateComponents = {
 	},
 	LocalWeaponTracker = {
@@ -3113,7 +3432,7 @@ return {
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="Script" referent="RBXE52454C636D94B3888E04E60E72C709D">
+		<Item class="Script" referent="RBX98118793167848A7A9BF8B0DEE8EF444">
 			<Properties>
 				<ProtectedString name="Source"><![CDATA[local runService = game:GetService("RunService")
 
@@ -3171,7 +3490,7 @@ Api.Init()]]></ProtectedString>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX236848BB28C44AA285B4239FB27A40B3">
+		<Item class="ModuleScript" referent="RBXC103DE7247454321A752B4740E4495B7">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local PropAttributeTypes
@@ -3204,7 +3523,7 @@ return PropAttributeTypes
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="Folder" referent="RBXF55A89B6EAF4445FA680C2D0B3D33788">
+		<Item class="Folder" referent="RBX24860662AA064C9FB2777AD9D3E2CAC3">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -3213,12 +3532,14 @@ return PropAttributeTypes
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
-			<Item class="ModuleScript" referent="RBXDF9A90AB61074C9582ABEECD0E1C1DB3">
+			<Item class="ModuleScript" referent="RBX8E07C51F96F742DC9BE88D1302728A03">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
-					<ProtectedString name="Source"><![CDATA[local StringConversion = require(script.Parent.Parent.StringConversion)
+					<ProtectedString name="Source"><![CDATA[local StringConversion = require(script.Parent.Parent.Util.StringConversion)
 local InstanceTypes = require(script.Parent.Parent.Types.InstanceTypes)
 local ReadInstance = require(script.Parent.ReadInstance)
+
+local EncodingService = game:GetService("EncodingService")
 
 local EnumTypes = require(script.Parent.Parent.Types.Enums.Main)
 
@@ -3366,21 +3687,21 @@ Read = {
 		rz = denormalize(rz)
 		return CFrame.new(X, Y, Z) * CFrame.fromEulerAnglesXYZ(rx, ry, rz), cursor
 	end,
-	
+
 	InstanceReference = function(str, cursor)
-		local length, cursor = Read.Int(str, cursor)
-		local value = str:sub(cursor, cursor + length - 1)
+		local value, cursor = Read.String(str, cursor)
 
 		return function()
 			if Root then
 				if not Root:GetAttribute(`Loaded`) then
 					Root:GetAttributeChangedSignal(`Loaded`):Wait()
 				end
-				
+
 				local object = ResolvePath(Root, value)
 				return object
 			end
-		end, cursor + length
+		end,
+			cursor
 	end,
 
 	BoundedFloat = function(str, cursor) -- returns the value read as a bounded float between 0-1. 3 symbols.
@@ -3449,18 +3770,19 @@ Read = {
 
 	MissionCodeHeader = function(str, cursor)
 		local codeVersion, mapId, currentCode, totalCodes
-		
+
 		codeVersion, cursor = Read.ShortestInt(str, cursor)
 		mapId, cursor = Read.ShortInt(str, cursor)
 		currentCode, cursor = Read.ShortInt(str, cursor)
 		totalCodes, cursor = Read.ShortInt(str, cursor)
-		
+
 		return {
 			CodeVersion = codeVersion,
 			CodeCurrent = currentCode,
 			CodeTotal = totalCodes,
 			MapId = mapId,
-		}, cursor
+		},
+			cursor
 	end,
 
 	Mission = function(str, cursor)
@@ -3471,7 +3793,19 @@ Read = {
 			end
 			str = code
 		end
-		
+
+		if VersionConfig.UseCompression then
+			local uncompressed = buffer.create(#str)
+			buffer.writestring(uncompressed, 0, str)
+
+			str = buffer.tostring(
+				EncodingService:DecompressBuffer(
+					EncodingService:Base64Decode(uncompressed),
+					Enum.CompressionAlgorithm.Zstd
+				)
+			)
+		end
+
 		Root = nil
 		local colorMap
 		colorMap, cursor = Read.ColorMap(str, cursor)
@@ -3493,8 +3827,14 @@ Read = {
 			MissionSetup.Name = "MissionSetup"
 			MissionSetup.Parent = mission
 			MissionSetup.Source = StringMissionSetup.Value
+			for _, subModule in StringMissionSetup:GetChildren() do
+				local module = Instance.new("ModuleScript")
+				module.Name = subModule.Name
+				module.Parent = MissionSetup
+				module.Source = subModule.Value
+			end
 		end
-		
+
 		mission:SetAttribute(`Loaded`, true)
 		return mission
 	end,
@@ -3509,7 +3849,7 @@ Read = {
 				Root = object
 				Root:SetAttribute(`Loaded`, false)
 			end
-			
+
 			while StringConversion.StringToNumber(str, cursor, 1) ~= 0 do
 				local child
 				child, cursor = Read.Instance(str, cursor, colorMap, stringMap)
@@ -3538,7 +3878,7 @@ Read = {
 
 	ResamplerMode = CreateEnumReader(Enum.ResamplerMode, EnumTypes.ResamplerMode),
 	SurfaceGuiSizingMode = CreateEnumReader(Enum.SurfaceGuiSizingMode, EnumTypes.SurfaceGuiSizingMode),
-	
+
 	TextureMode = CreateEnumReader(Enum.TextureMode, EnumTypes.TextureMode),
 }
 
@@ -3553,14 +3893,14 @@ return Read
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX1943568219B94CD79FE4E8D32E971EDC">
+			<Item class="ModuleScript" referent="RBXB01EDFEFCDC744DCA40D570F773311E6">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local InsertService = game:GetService("InsertService")
 
 local ENABLE_ARBITRARY_MESHES = true
 
-local StringConversion = require(script.Parent.Parent.StringConversion)
+local StringConversion = require(script.Parent.Parent.Util.StringConversion)
 local InstanceProperties = require(script.Parent.Parent.Types.InstanceProperties)
 local DefaultProperties = require(script.Parent.Parent.Types.DefaultProperties)
 local AttributeTypes = require(script.Parent.Parent.Types.AttributeTypes)
@@ -3801,130 +4141,7 @@ return ReadInstance
 				</Properties>
 			</Item>
 		</Item>
-		<Item class="ModuleScript" referent="RBXD8A14921FA5B4D3BB324232354EDE78F">
-			<Properties>
-				<Content name="LinkedSource"><null></null></Content>
-				<ProtectedString name="Source"><![CDATA[local CHARACTER_SET = {
-	"b",
-	"c",
-	"d",
-	"f",
-	"g",
-	"h",
-	"j",
-	"k",
-	"m",
-	"p",
-	"q",
-	"r",
-	"t",
-	"v",
-	"w",
-	"x",
-	"y",
-	"3",
-	"4",
-	"6",
-	"7",
-	"8",
-	"9",
-	"!",
-	'"',
-	"#",
-	"$",
-	"%",
-	"&",
-	"'",
-	"(",
-	")",
-	"*",
-	"+",
-	",",
-	"-",
-	".",
-	"/",
-	":",
-	";",
-	"<",
-	"=",
-	">",
-	"?",
-	"@",
-	"B",
-	"C",
-	"D",
-	"F",
-	"G",
-	"H",
-	"J",
-	"K",
-	"M",
-	"P",
-	"Q",
-	"R",
-	"T",
-	"V",
-	"W",
-	"X",
-	"Y",
-	"[",
-	"\\",
-	"]",
-	"^",
-	"_",
-	"`",
-	"{",
-	"|",
-	"}",
-	"~",
-}
-
-local characterKeys = {}
-local characterValues = {}
-for i, v in pairs(CHARACTER_SET) do
-	characterKeys[v] = i - 1
-	characterValues[i - 1] = v
-end
-
-local CHAR_COUNT = #CHARACTER_SET
-return {
-	StringToNumber = function(str, cursor, size)
-		local total = 0
-		for i = cursor, cursor + size - 1 do
-			local char = str:sub(cursor, cursor)
-			total = total * CHAR_COUNT + characterKeys[char]
-			cursor += 1
-		end
-		return total
-	end,
-
-	NumberToString = function(number, charCount)
-		local str = ""
-		local iteration = 0
-		while number >= 0 and iteration < charCount do
-			local value = number % CHAR_COUNT
-			str = characterValues[value] .. str
-			number = math.floor(number / CHAR_COUNT)
-			iteration += 1
-		end
-		return str
-	end,
-
-	GetMaxNumber = function(charCount)
-		return math.pow(CHAR_COUNT, charCount) - 1
-	end,
-}
-]]></ProtectedString>
-				<string name="ScriptGuid">{99749195-B656-4B3A-A0F4-4D219D618D42}</string>
-				<BinaryString name="AttributesSerialize"></BinaryString>
-				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
-				<bool name="DefinesCapabilities">false</bool>
-				<string name="Name">StringConversion</string>
-				<int64 name="SourceAssetId">-1</int64>
-				<BinaryString name="Tags"></BinaryString>
-			</Properties>
-		</Item>
-		<Item class="Folder" referent="RBX82FDA5BCFB164E06BA34D01A5D1DC226">
+		<Item class="Folder" referent="RBX8C9296C5E01B42ABA01C162D068D8345">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -3933,7 +4150,7 @@ return {
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
-			<Item class="ModuleScript" referent="RBX4024EF8C69E049B58389306A97EAEF3B">
+			<Item class="ModuleScript" referent="RBXFB2B77D00D5642398107B1A1D966ECC2">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local AttributeTypes
@@ -3961,7 +4178,7 @@ return AttributeTypes
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX480603B5C57C4FA28A0E877C7DF7638B">
+			<Item class="ModuleScript" referent="RBX85C7FAFAC2D5487CB810E0C688C264A1">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[return {
@@ -3980,7 +4197,7 @@ return AttributeTypes
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="Folder" referent="RBX25FB08E060CB4B5CAAADF2C09E009BEA">
+			<Item class="Folder" referent="RBXF840B40F3E0A4391815702CC19A96745">
 				<Properties>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -3989,7 +4206,7 @@ return AttributeTypes
 					<int64 name="SourceAssetId">-1</int64>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
-				<Item class="ModuleScript" referent="RBXB71D2222D76C42A5A0051070BEFD0093">
+				<Item class="ModuleScript" referent="RBX6B480DE0B3E84CB3AEDA12C29C7F652D">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[return {
@@ -4008,7 +4225,7 @@ return AttributeTypes
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="Folder" referent="RBX5AB0D6CDB7C14AAAB745A57822AF348F">
+				<Item class="Folder" referent="RBX810EFEE4A8734B378D4F8C2287D20348">
 					<Properties>
 						<BinaryString name="AttributesSerialize"></BinaryString>
 						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -4017,7 +4234,7 @@ return AttributeTypes
 						<int64 name="SourceAssetId">-1</int64>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
-					<Item class="ModuleScript" referent="RBX8CD256D8773F4521B0F780D13AF1B7F0">
+					<Item class="ModuleScript" referent="RBXA8DF3E88B003443BAAAA0C7D1C36219A">
 						<Properties>
 							<Content name="LinkedSource"><null></null></Content>
 							<ProtectedString name="Source"><![CDATA[return {
@@ -4033,7 +4250,7 @@ return AttributeTypes
 							<BinaryString name="Tags"></BinaryString>
 						</Properties>
 					</Item>
-					<Item class="ModuleScript" referent="RBXCC138CE5B49A4ECAA2E26A26A40152AD">
+					<Item class="ModuleScript" referent="RBXDB491B60CE8348729DDA37F8E1DE2F46">
 						<Properties>
 							<Content name="LinkedSource"><null></null></Content>
 							<ProtectedString name="Source"><![CDATA[return {
@@ -4050,7 +4267,7 @@ return AttributeTypes
 						</Properties>
 					</Item>
 				</Item>
-				<Item class="ModuleScript" referent="RBXA06A13C309544E1EA1CCD308F056073C">
+				<Item class="ModuleScript" referent="RBX75C88792A78642FBB0A8BC8A676B9EBA">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local ENUM = script.Parent
@@ -4092,7 +4309,7 @@ return enumsMain]]></ProtectedString>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBX2C61B2FAEEDF4006A815290C23E6A194">
+				<Item class="ModuleScript" referent="RBX3453B2C4347743A59F81FD90236FFB7B">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local Materials
@@ -4154,7 +4371,7 @@ return Materials
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBX3DB146C0DE16447DA105F3E2248E36B4">
+				<Item class="ModuleScript" referent="RBX8FCB643F01B44688A9B6276E61F60FF9">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[return {
@@ -4176,7 +4393,7 @@ return Materials
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBX4E8E761F42F74FA2BACA3A8F3CA7F652">
+				<Item class="ModuleScript" referent="RBX8707732AACA34D418AE3E2B87CA1611D">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[return {
@@ -4197,7 +4414,7 @@ return Materials
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBX4018D5104FE54FC38A08F628797712F6">
+				<Item class="ModuleScript" referent="RBXEBFE8216D47D4C49A3E34BFBAA954507">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local PartTypes
@@ -4220,7 +4437,7 @@ return PartTypes]]></ProtectedString>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="Folder" referent="RBXB50207C96F0B448B8C88CD29600CDA09">
+				<Item class="Folder" referent="RBX702134A8AA6E4F369672D48F98E1787D">
 					<Properties>
 						<BinaryString name="AttributesSerialize"></BinaryString>
 						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -4229,7 +4446,7 @@ return PartTypes]]></ProtectedString>
 						<int64 name="SourceAssetId">-1</int64>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
-					<Item class="ModuleScript" referent="RBX2000A1897D8D49B09A31015D7602D149">
+					<Item class="ModuleScript" referent="RBX2975551498B34EB1A00EDAB808149828">
 						<Properties>
 							<Content name="LinkedSource"><null></null></Content>
 							<ProtectedString name="Source"><![CDATA[return {
@@ -4248,7 +4465,7 @@ return PartTypes]]></ProtectedString>
 							<BinaryString name="Tags"></BinaryString>
 						</Properties>
 					</Item>
-					<Item class="ModuleScript" referent="RBX3C81A11898214613A4F2FBB1653348FF">
+					<Item class="ModuleScript" referent="RBX0CBF1611B9FC4DB7B777673470A5C65C">
 						<Properties>
 							<Content name="LinkedSource"><null></null></Content>
 							<ProtectedString name="Source"><![CDATA[return {
@@ -4266,7 +4483,7 @@ return PartTypes]]></ProtectedString>
 							<BinaryString name="Tags"></BinaryString>
 						</Properties>
 					</Item>
-					<Item class="ModuleScript" referent="RBXB7FFD5AC27F644C5B5D5AD559ED544C1">
+					<Item class="ModuleScript" referent="RBXA01142B771F94A189578198B1B8E7EB0">
 						<Properties>
 							<Content name="LinkedSource"><null></null></Content>
 							<ProtectedString name="Source"><![CDATA[return {
@@ -4283,7 +4500,7 @@ return PartTypes]]></ProtectedString>
 							<BinaryString name="Tags"></BinaryString>
 						</Properties>
 					</Item>
-					<Item class="ModuleScript" referent="RBX13DDD15240E243DEA8D4436ADA32016D">
+					<Item class="ModuleScript" referent="RBX0B3D584CF0AC40719F4578771438512B">
 						<Properties>
 							<Content name="LinkedSource"><null></null></Content>
 							<ProtectedString name="Source"><![CDATA[return {
@@ -4303,7 +4520,7 @@ return PartTypes]]></ProtectedString>
 						</Properties>
 					</Item>
 				</Item>
-				<Item class="ModuleScript" referent="RBX986814E8A56848CBB615B139515B93AA">
+				<Item class="ModuleScript" referent="RBX61CCE30BAEFE4A37A783A3141946D759">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[return {
@@ -4321,7 +4538,7 @@ return PartTypes]]></ProtectedString>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBXC0D3B860BCA2484F85A44A8145EDB5E8">
+				<Item class="ModuleScript" referent="RBX4FFF79A78F764B23AE064B28E766F4C7">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local TextureMode
@@ -4333,7 +4550,7 @@ TextureMode = {
 }
 
 return TextureMode]]></ProtectedString>
-						<string name="ScriptGuid">{42314C08-FBD4-482C-BAA0-087B092CC89C}</string>
+						<string name="ScriptGuid">{EDC0A6F2-37D7-4F03-83FA-3227311F117D}</string>
 						<BinaryString name="AttributesSerialize"></BinaryString>
 						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 						<bool name="DefinesCapabilities">false</bool>
@@ -4343,7 +4560,7 @@ return TextureMode]]></ProtectedString>
 					</Properties>
 				</Item>
 			</Item>
-			<Item class="ModuleScript" referent="RBX6215F7A528A041E69AAC3DA8C3D91680">
+			<Item class="ModuleScript" referent="RBXE1E3356FFC4B4E24828DC30D7656C267">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local InstanceProperties
@@ -4637,7 +4854,7 @@ return InstanceProperties
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX1E0B1E662E7947A7B770EAAF03B49E5C">
+			<Item class="ModuleScript" referent="RBXE27D8DF9C18B445487271DB78C1CEA7E">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local InstanceTypes = {
@@ -4682,7 +4899,7 @@ return InstanceTypes]]></ProtectedString>
 				</Properties>
 			</Item>
 		</Item>
-		<Item class="Folder" referent="RBX6D5FE320FDC647FDA4C5260C10552467">
+		<Item class="Folder" referent="RBX95E1B97756924FCBBFBC818F49E21820">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -4691,7 +4908,7 @@ return InstanceTypes]]></ProtectedString>
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
-			<Item class="ModuleScript" referent="RBXE3D2614F47E94D24A6123C2B6EC34CD4">
+			<Item class="ModuleScript" referent="RBX5819F912882B49078FAAAEDDDC2A3A49">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local module = {
@@ -4718,7 +4935,7 @@ return module]]></ProtectedString>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX051C02987E5C4C8F8DDA42B0FE4836B4">
+			<Item class="ModuleScript" referent="RBX692019A85AE2481CAFC86D70BBB5EF8C">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local AxisAlign = {}
@@ -4779,7 +4996,7 @@ return AxisAlign
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX9194B1B4257149B1A003F9F47E8C1CF0">
+			<Item class="ModuleScript" referent="RBXAC01DAFC2D354679A5ADEE1381F86989">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local Actor = require(script.Parent.Actor)
@@ -4821,7 +5038,7 @@ end]]></ProtectedString>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX4CFF30233C044017BDF7C6EC64DB0ECC">
+			<Item class="ModuleScript" referent="RBX4740CD83806045C1855C85D585113D86">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local CHARACTER_SET = {	'b', 'c', 'd', 'f', 'g', 'h', 'j', 'k', 'm', 'p', 'q', 'r', 't', 'v', 'w', 'x', 'y',
@@ -4837,7 +5054,8 @@ for i, v in pairs(CHARACTER_SET) do
 end
 
 local CHAR_COUNT = #CHARACTER_SET
-return {
+local stringConversion
+stringConversion = {
 	StringToNumber = function(str, cursor, size)
 		local total = 0
 		for i = cursor, cursor + size - 1 do
@@ -4849,6 +5067,19 @@ return {
 	end,
 	
 	NumberToString = function(number, charCount)
+		if math.isinf(number) then
+			if math.sign(number) > 0 then
+				local max = stringConversion.GetMaxNumber(charCount)
+				warn(`Converting +Inf to a finite number! Will use maximum representable number ({max}), fix if unintended`)
+				number = max
+			else
+				warn(`Converting -Inf to a finite number! Will use minimum representable number (0), fix if unintended`)
+				number = 0
+			end
+		elseif math.isnan(number) then
+			warn("Converting NaN (not a number) to a number! Will use 0, fix if unintended")
+			number = 0
+		end
 		local str = ""
 		local iteration = 0
 		while number >= 0 and iteration < charCount do
@@ -4863,7 +5094,9 @@ return {
 	GetMaxNumber = function(charCount)
 		return math.pow(CHAR_COUNT, charCount) - 1
 	end,
-}]]></ProtectedString>
+}
+
+return stringConversion]]></ProtectedString>
 					<string name="ScriptGuid">{301AAB01-EFBF-4265-8A3A-C552225080E5}</string>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -4873,14 +5106,15 @@ return {
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX76A98ABFCA0F417FB4125D876C431972">
+			<Item class="ModuleScript" referent="RBX7305964D4CE446A79B68324C236FFF17">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
-					<ProtectedString name="Source"><![CDATA[local VERSION_LATEST = 1
+					<ProtectedString name="Source"><![CDATA[local VERSION_LATEST = 2
 
 local CODE_VERSION_LOOKUP = {
-	[0] = { ReplaceNewlines = false },
-	[1] = { ReplaceNewlines = true  }
+	[0] = { ReplaceNewlines = false, UseCompression = false },
+	[1] = { ReplaceNewlines = true, UseCompression = false },
+	[2] = { ReplaceNewlines = true, UseCompression = true }
 }
 
 -- This works, Lua counts table lengths starting from 1
@@ -4895,6 +5129,7 @@ local versionConfig = {
 	VersionNumber_API = 1,
 	
 	ReplaceNewlines = true,
+	UseCompression  = true
 }
 
 function versionConfig.change_version(self, to)
@@ -4909,6 +5144,8 @@ function versionConfig.change_version(self, to)
 	return true, nil
 end
 
+versionConfig:change_version(VERSION_LATEST)
+
 return versionConfig]]></ProtectedString>
 					<string name="ScriptGuid">{066BA815-FBBA-44F6-9325-55F155AF54E9}</string>
 					<BinaryString name="AttributesSerialize"></BinaryString>
@@ -4919,7 +5156,7 @@ return versionConfig]]></ProtectedString>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX1FF97829042E43CD9AF3AE53AB40936B">
+			<Item class="ModuleScript" referent="RBX071526FD021F4DCFA8AF5294FE2472B6">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local STASH_LINK_NAME = "StashLink"
@@ -5001,7 +5238,7 @@ return module
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX28AB859EF0064B038F96F26FD14F0374">
+			<Item class="ModuleScript" referent="RBX985645B9E03043F6AD81CCAB195A052C">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local ZoneUtil = {}
@@ -5048,7 +5285,7 @@ return ZoneUtil]]></ProtectedString>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="Folder" referent="RBX7A4FC67049D54AC48020D9DAB724781F">
+			<Item class="Folder" referent="RBX398352F89FE2447AA730427876F215B6">
 				<Properties>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -5057,7 +5294,7 @@ return ZoneUtil]]></ProtectedString>
 					<int64 name="SourceAssetId">-1</int64>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
-				<Item class="ModuleScript" referent="RBXE6718D2783F741FBB74D6E25BA02DEE5">
+				<Item class="ModuleScript" referent="RBX27AEB742F5244BAF914D1678CB6D0D0C">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local AnimRunner = require(script.Parent._Anim)
@@ -5144,7 +5381,7 @@ end]]></ProtectedString>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBX349BBCF2C28847C38437975CBEDBFC5E">
+				<Item class="ModuleScript" referent="RBX0C0DFA6A40F84E65A6CB07F06C22358B">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local RunService = game:GetService("RunService")
@@ -5185,7 +5422,7 @@ return Anim]]></ProtectedString>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBX3E9066466ED94BFE8F41333C149168B3">
+				<Item class="ModuleScript" referent="RBXD8A520443A6A4DEF90FF09256E0C8E08">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local DEFAULT_LINEAR_TRANSITION_RATE = 4
@@ -5258,7 +5495,7 @@ end]]></ProtectedString>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBX73F2E1AE193147C9A4DED3D646560F83">
+				<Item class="ModuleScript" referent="RBXCD0810DF0EE84A96A752FD939A5F3F9D">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local DEFAULT_LINEAR_TRANSITION_RATE = 4
@@ -5332,7 +5569,7 @@ end]]></ProtectedString>
 					</Properties>
 				</Item>
 			</Item>
-			<Item class="Folder" referent="RBX4C00DE9B195947188A5F40D57A653ED5">
+			<Item class="Folder" referent="RBX48861165C7004BD58B388EC48285EEBD">
 				<Properties>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -5341,7 +5578,7 @@ end]]></ProtectedString>
 					<int64 name="SourceAssetId">-1</int64>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
-				<Item class="ModuleScript" referent="RBX0F32290309BD458583BD29D1C6BBF683">
+				<Item class="ModuleScript" referent="RBXDD5864B4CE4F40A9B1763E48C030C189">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local TABLE = "table"
@@ -5449,7 +5686,7 @@ end]]></ProtectedString>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBXAC51642D5C8548D385CB5732F42E2EE3">
+				<Item class="ModuleScript" referent="RBXC09165EF1E5F4D2DA9FA50A7CFF52DD2">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local cleanup
@@ -5480,7 +5717,7 @@ return cleanup]]></ProtectedString>
 					</Properties>
 				</Item>
 			</Item>
-			<Item class="Folder" referent="RBX2F4D9793779842EB8AFAFD8834424F66">
+			<Item class="Folder" referent="RBX70967AEE0BE1441AAA3D2FDE4193F59D">
 				<Properties>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -5489,7 +5726,7 @@ return cleanup]]></ProtectedString>
 					<int64 name="SourceAssetId">-1</int64>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
-				<Item class="ModuleScript" referent="RBX2922659D0686492EA45AD4A6804BE659">
+				<Item class="ModuleScript" referent="RBX22F252A9D5064B23B971488E7EE07331">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local Derived = {
@@ -5553,7 +5790,7 @@ end]]></ProtectedString>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBXE967CC7DCC9A4E248220FEA7C78BE9AC">
+				<Item class="ModuleScript" referent="RBXABE86B8A4F484441AB5A4F593C333F06">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local DerivedTable = {
@@ -5632,7 +5869,7 @@ end]]></ProtectedString>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBX65DAFE4F46D544E5975843C6A7E710DA">
+				<Item class="ModuleScript" referent="RBX74957F30DA1A4F6EA0280E3BA94A2CE6">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local Update = require(script.Parent:WaitForChild("_Update"))
@@ -5671,7 +5908,7 @@ end
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBX6B1B592BFEF9437ABB4EBE556CE9DE8A">
+				<Item class="ModuleScript" referent="RBX411096391CFC438BB6BC525EDC801966">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[return function(base)
@@ -5717,7 +5954,7 @@ end]]></ProtectedString>
 						<BinaryString name="Tags"></BinaryString>
 					</Properties>
 				</Item>
-				<Item class="ModuleScript" referent="RBX9DE68AF17BC445B18681C650AC3330AE">
+				<Item class="ModuleScript" referent="RBXAFDC9B1E670A443AABB17F979B269080">
 					<Properties>
 						<Content name="LinkedSource"><null></null></Content>
 						<ProtectedString name="Source"><![CDATA[local Watch = {
@@ -5784,7 +6021,7 @@ end]]></ProtectedString>
 					</Properties>
 				</Item>
 			</Item>
-			<Item class="ModuleScript" referent="RBXF0A1D6D5EB9E4A199193E75D35234255">
+			<Item class="ModuleScript" referent="RBX5C19E70B1FF74F439140A4AA16BF42F9">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[return function(prop)
@@ -5802,7 +6039,7 @@ end]]></ProtectedString>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX365D466C1DBE495082B1C9F99DABE508">
+			<Item class="ModuleScript" referent="RBX9CF71B33284F439C9C9C05A755C77AD6">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[--[[
@@ -5880,7 +6117,9 @@ local function parseSerializerFeatures()
 	return featureDict
 end
 
-return function(featureName)
+return function(featureName, allFeaturesWorks)
+	allFeaturesWorks = if allFeaturesWorks == nil then true else allFeaturesWorks
+
 	local featureValue = workspace:GetAttribute(featureName)
 	if featureValue ~= nil then
 		return featureValue
@@ -5891,11 +6130,11 @@ return function(featureName)
 		return featCfg[featureName]
 	end
 	
-	if workspace:GetAttribute("SerializerEnableAllFeatures") == true then
+	if workspace:GetAttribute("SerializerEnableAllFeatures") == true and allFeaturesWorks then
 		return true
 	end
 end]]></ProtectedString>
-					<string name="ScriptGuid">{D7476A01-7E9C-40D0-9B24-1627E65049F2}</string>
+					<string name="ScriptGuid">{E05B4CCE-8645-4BCA-A4F4-7CA2BC06869B}</string>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
@@ -5904,8 +6143,658 @@ end]]></ProtectedString>
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
+			<Item class="ModuleScript" referent="RBX3A4E17ECFCAA4EE4A5E20AF39EF08D56">
+				<Properties>
+					<Content name="LinkedSource"><null></null></Content>
+					<ProtectedString name="Source"><![CDATA[local Actor = require(script.Parent.Actor)
+local Create = Actor.Create
+local State = Actor.State
+local Derived = Actor.Derived
+
+local FrameMod = {}
+
+local function merge(props, defaults)
+	for k, v in pairs(defaults) do
+		if props[k] == nil then
+			props[k] = v
+		end
+	end
+	return props
+end
+
+local function _frame(props, children)
+	merge(props, { BorderSizePixel = 0, ClipsDescendants = true })
+	return Create("Frame", props, children)
+end
+
+function FrameMod.Colored(color, props, children)
+	props.BackgroundColor3 = color
+	return _frame(
+		props,
+		children
+	)
+end
+
+function FrameMod.Invisible(props, children)
+	return _frame(
+		merge(props, { BackgroundTransparency = 1 }),
+		children
+	)
+end
+
+function FrameMod.Standard(props, children)
+	return _frame(
+		merge(props, { BackgroundTransparency = 0.5, BackgroundColor3 = Color3.new(0,0,0) }),
+		children
+	)
+end
+
+function FrameMod.Round(frame, by)
+	local corner = Create("UICorner", { CornerRadius = UDim.new(0, by) })
+
+	corner.Parent = frame
+	return frame, corner
+end
+
+local sideToRot = {
+	Top = 90,
+	Right = 180,
+	Left = 0,
+	Bottom = -90
+}
+function FrameMod.RoundSide(frame, by, side)
+	-- Abuses some jank found on the devforum
+	-- Why is this not a built-in thing?
+	local corner = Create("UICorner", { CornerRadius = UDim.new(0, by) })
+
+	local rot = sideToRot[side] or 0
+
+	local stroke = Create("UIStroke", {
+		Color = frame.BackgroundColor3,
+		LineJoinMode = Enum.LineJoinMode.Bevel,
+		Thickness = 0.1
+	}, {
+		Create("UIGradient", {
+			Rotation = rot,
+			Transparency = NumberSequence.new(0, 1)
+		})
+	})
+
+	-- Extra sprinkle of weirdness on top
+	-- Patches up some single-pixel holes around the edges
+	local patchUp = FrameMod.Colored(frame.BackgroundColor3, {
+		Size = UDim2.fromScale(1, 1)
+	}, {
+		corner:Clone()
+	})
+
+	local colorUpdate = frame:GetPropertyChangedSignal("BackgroundColor3"):Connect(function() stroke.Color = frame.BackgroundColor3 patchUp.BackgroundColor3 = frame.BackgroundColor3 end)
+	frame.Destroying:Once(function() colorUpdate:Disconnect() end)
+
+	patchUp.Parent = frame
+	corner.Parent = frame
+	stroke.Parent = frame
+	return frame, corner, stroke
+end
+
+-- Please don't kill me for this
+-- I figure it makes sense to at least imitate the interface of Button()
+setmetatable( FrameMod, { __call = function(self, ...) return FrameMod.Standard(...) end } )
+
+return FrameMod]]></ProtectedString>
+					<string name="ScriptGuid">{80E86AE3-EEBF-488A-AACA-9714579FB0E8}</string>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<string name="Name">Frame</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<BinaryString name="Tags"></BinaryString>
+				</Properties>
+			</Item>
+			<Item class="ModuleScript" referent="RBXDEEE7406959943229848C1AAF184DEFE">
+				<Properties>
+					<Content name="LinkedSource"><null></null></Content>
+					<ProtectedString name="Source"><![CDATA[local VIVID_GREEN = Color3.fromHex("3e983e")
+local DULL_GREEN  = Color3.fromHex("317032")
+
+local VIVID_RED = Color3.fromHex("ca4b4b")
+local DULL_RED  = Color3.fromHex("aa5559")
+
+local VIVID_BLUE = Color3.fromHex("4a9ec8")
+local DULL_BLUE  = Color3.fromHex("5191b4")
+
+local VIVID_PURPLE = Color3.fromHex("834ac8")
+local DULL_PURPLE  = Color3.fromHex("7f58b0")
+
+local VIVID_YELLOW = Color3.fromHex("cfc74b")
+local DULL_YELLOW  = Color3.fromHex("96923c")
+
+return {
+	WHITE  = Color3.fromHex("ffffff"),
+	GRAY   = Color3.fromHex("232526"),
+	BLACK  = Color3.fromHex("000000"),
+
+	VIVID_RED    = VIVID_RED,
+	VIVID_GREEN  = VIVID_GREEN,
+	VIVID_BLUE   = VIVID_BLUE,
+	VIVID_PURPLE = VIVID_PURPLE,
+	VIVID_YELLOW = VIVID_YELLOW,
+
+	DULL_RED    = DULL_RED,
+	DULL_GREEN  = DULL_GREEN,
+	DULL_BLUE   = DULL_BLUE,
+	DULL_PURPLE = DULL_PURPLE,
+	DULL_YELLOW = DULL_YELLOW,
+
+	LEGEND_RED       = VIVID_RED,
+	OPERATIVE_PURPLE = VIVID_PURPLE,
+	RECRUIT_BLUE     = VIVID_BLUE,
+	SOLO_GREEN       = VIVID_GREEN,
+	CHALLENGE_YELLOW = VIVID_YELLOW,
+
+}]]></ProtectedString>
+					<string name="ScriptGuid">{3AA8B052-FD7D-4D43-B087-1B14BC962AF9}</string>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<string name="Name">CommonColors</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<BinaryString name="Tags"></BinaryString>
+				</Properties>
+			</Item>
+			<Item class="Folder" referent="RBX678AD3442D044B3EB61E8042EC120990">
+				<Properties>
+					<BinaryString name="AttributesSerialize"></BinaryString>
+					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+					<bool name="DefinesCapabilities">false</bool>
+					<string name="Name">Notifications</string>
+					<int64 name="SourceAssetId">-1</int64>
+					<BinaryString name="Tags"></BinaryString>
+				</Properties>
+				<Item class="ModuleScript" referent="RBX92FF7E80726F44268F2D3A38EF3C0F0A">
+					<Properties>
+						<Content name="LinkedSource"><null></null></Content>
+						<ProtectedString name="Source"><![CDATA[local runService = game:GetService("RunService")
+
+local commonColour  = require(script.Parent.Parent.Parent.Util.CommonColors)
+local notifSeverity = require(script.Parent.Severity)
+
+-- We get to do UI, yay!
+local Actor = require(script.Parent.Parent.Parent.Util.Actor)
+local Create = Actor.Create
+local State = Actor.State
+local Derived = Actor.Derived
+local Frame = require(script.Parent.Parent.Parent.Util.Frame)
+
+local textBoundsParams = Instance.new("GetTextBoundsParams")
+
+return function(sizeState, timeState)
+
+	return function(data)
+
+		local severityData = data.Severity
+		local duration = timeState._Value * severityData.TimeMult
+
+		local livedDuration = State(0)
+		local lifetimeFac  = Derived(function(dur)
+			if math.isinf(duration) then
+				return 0
+			end
+			return dur / duration
+		end, livedDuration)
+
+		local lifetimeCol  = Derived(function(fac)
+			if math.isinf(duration) then
+				return severityData.Color
+			end
+			return commonColour.SOLO_GREEN:Lerp(commonColour.LEGEND_RED, fac)
+		end, lifetimeFac)
+		local lifetimeSize = Derived(function(fac) return UDim2.new(1 - fac, 0, 0, 8) end, lifetimeFac)
+
+		local lifetimePanel = Frame.RoundSide(Frame.Colored(
+			lifetimeCol,
+			{
+				AnchorPoint = Vector2.yAxis,
+
+				Size = lifetimeSize,
+				Position = UDim2.new(0, 0, 1, 0),
+				Name = "LifetimeBar"
+			}
+		), 8, "Top")
+
+		local notifContentTitleIcon = Create(
+			"ImageLabel",
+			{
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.fromScale(1, 0.5),
+				Size     = UDim2.fromOffset(24, 24),
+				SizeConstraint = Enum.SizeConstraint.RelativeYY,
+				BackgroundTransparency = 1,
+				ImageTransparency = 0.5,
+				Image = `rbxassetid://{severityData.ImageID}`,
+				-- Not a fan of how this looks
+				--ImageColor3 = severityData.Color
+			}
+		)
+
+		local notifContentTitle = Create(
+			"TextLabel",
+			{
+				Text = data.Title,
+				TextColor3 = commonColour.WHITE,
+				Name = "Title",
+				Size = UDim2.fromScale(1, 0.25),
+				FontFace = Font.fromName("Zekton", Enum.FontWeight.Bold),
+				TextScaled = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				BackgroundTransparency = 1,
+			},
+			{
+				notifContentTitleIcon,
+				Create("UITextSizeConstraint", { MaxTextSize = 21 })
+			}
+		)
+
+		local notifContentSeparator = Frame.Colored(
+			severityData.Color,
+			{
+				Name = "Separator",
+				Size = UDim2.new(1, 0, 0, 2),
+			}
+		)
+
+		local notifContentDesc = Create(
+			"TextLabel",
+			{
+				Text = data.Description,
+				TextColor3 = commonColour.WHITE,
+				TextTruncate = Enum.TextTruncate.SplitWord,
+				TextWrapped = true,
+				TextSize = 16,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextYAlignment = Enum.TextYAlignment.Top,
+				Name = "Description",
+				Size = UDim2.new(1, -8, 1, 0),
+				BackgroundTransparency = 1,
+				FontFace = Font.fromName("Zekton"),
+				RichText = data.Rich or false,
+			}
+		)
+
+		-- TODO: Figure this out later
+		-- Got some incredibly buggy results with trying to use the built-in auto-scaling on the canvas
+		-- I've been sitting on these changes for like a week now and I would like to get a patch up
+		-- This can be revisited when I come back to add support for using these as help/keybind dialogues
+		local notifContentDescPanel = Create(
+			"ScrollingFrame",
+			{
+				Name = "Description_Panel",
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0.75, -14),
+				ScrollBarThickness = 8,
+				CanvasSize = UDim2.fromScale(0, 0)
+			},
+			{
+				notifContentDesc
+			}
+		)
+
+		local notifContentPanelList = Create("UIListLayout", {
+			Padding = UDim.new(0, 2),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			HorizontalFlex = Enum.UIFlexAlignment.Fill
+		})
+
+		local notifContentPanelPad = Create("UIPadding", {
+			PaddingBottom = UDim.new(0, 4),
+			PaddingLeft   = UDim.new(0, 4),
+			PaddingRight  = UDim.new(0, 4),
+			PaddingTop    = UDim.new(0, 4),
+		})
+
+		local notifContentPanel = Frame.Round(Frame.Colored(
+			commonColour.GRAY,
+			{
+				Name = "Content",
+				Size = UDim2.fromScale(1, 1)
+			},
+			{
+				notifContentPanelList,
+				notifContentPanelPad,
+				notifContentTitle,
+				notifContentSeparator,
+				notifContentDescPanel
+			}
+		), 8)
+
+		local notifPanel = Frame.Invisible(
+			{
+				Name = `Notif_{data.Title:gsub("%s", "")}_Panel`,
+				Size = UDim2.new(1, 0, 0, sizeState._Value),
+			},
+			{
+				notifContentPanel,
+				lifetimePanel
+			}
+		)
+
+		local consume = function()
+			task.spawn(function()
+				local runServiceSignal = runService.Heartbeat:Connect(function(dt)
+					if notifPanel == nil then return end
+					if notifPanel.GuiState == Enum.GuiState.Idle then
+						livedDuration:set(livedDuration._Value + dt)
+					end
+					if notifPanel.GuiState == Enum.GuiState.Press then
+						livedDuration:set(math.huge)
+					end
+					if livedDuration._Value >= duration then
+						notifPanel:Destroy()
+					end
+				end)
+				notifPanel.Destroying:Wait()
+				runServiceSignal:Disconnect()
+			end)
+		end
+
+		return notifPanel, consume
+	end
+end]]></ProtectedString>
+						<string name="ScriptGuid">{1986A167-F4D1-4F6A-B200-5A884D476127}</string>
+						<BinaryString name="AttributesSerialize"></BinaryString>
+						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+						<bool name="DefinesCapabilities">false</bool>
+						<string name="Name">GuiFactory</string>
+						<int64 name="SourceAssetId">-1</int64>
+						<BinaryString name="Tags"></BinaryString>
+					</Properties>
+				</Item>
+				<Item class="ModuleScript" referent="RBX2EED4C8E4C824D39974AED455D45CCAC">
+					<Properties>
+						<Content name="LinkedSource"><null></null></Content>
+						<ProtectedString name="Source"><![CDATA[local FeatureCheck = require(script.Parent.Parent.Parent.Util.FeatureCheck)
+
+local NotifSeverity = require(script.Parent.Severity)
+
+-- We get to do UI, yay!
+local Actor = require(script.Parent.Parent.Parent.Util.Actor)
+local Create = Actor.Create
+local State = Actor.State
+local Derived = Actor.Derived
+
+local NOTIF_PAD = 8
+local SCROLLBAR_SIZE = 8
+
+local NOTIF_SIZE_FEAT = "SerializerNotifSize"
+local DEFAULT_NOTIF_SIZE = 125
+
+local NOTIF_TIME_FEAT = "SerializerNotifDuration"
+local DEFAULT_NOTIF_TIME = 5
+
+local NotificationManager = {}
+
+local _stackPos = 1
+local _notifStack = {}
+
+local canvasSizeState = State(0)
+local notifSizeState  = State(0)
+local notifTimeState  = State(0)
+
+local GuiFactory = require(script.Parent.GuiFactory)(notifSizeState, notifTimeState)
+
+local desc_tags = { ["%[tab%]"] = '\t' }
+
+local function description_sanitise(desc)
+	desc = desc:gsub("[ \r\t]*\n[ \r\t]*", "\n"):gsub("^%s*", ""):gsub("%s*$", "")
+	for tag, repl in pairs(desc_tags) do
+		desc = desc:gsub(tag, repl)
+	end
+	return desc
+end
+
+local function feature_state_updator(state, featName, default, minimum, falseValue)
+	if falseValue == nil then falseValue = minimum end
+	return function()
+		local setVal = FeatureCheck(featName, false)
+		local setType = type(setVal)
+
+		if setType ~= "number" and setType ~= "nil" and setType ~= "boolean" then
+			warn(`{featName} set to non-numeric non-nil value! Will use default of {default}`)
+			NotificationManager.Push{
+				Title = `Bad {featName} Value!`,
+				Description = `{featName} must be nil or a number!\n\nA default of {default} will be used.`,
+				Severity = "INFO"
+			}
+		end
+
+		if setType == "boolean" then
+			setVal = setVal and default or falseValue
+		end
+
+		setVal = setVal or default
+
+		if setVal < minimum then
+			warn(`{featName} set to unreasonably small value (< {minimum})! Will use default of {default}`)
+			NotificationManager.Push{
+				Title = `Bad {featName} Value!`,
+				Description = `{featName} was set to an unreasonably small value of {setVal}! A value of {minimum} or greater is expected.\n\n` ..
+							  `A default of {default} will be used.`,
+				Severity = "INFO"
+			}
+			setVal = DEFAULT_NOTIF_SIZE
+		end
+
+		state:set(
+			setVal
+		)
+	end
+end
+
+local update_notif_size = feature_state_updator(notifSizeState, NOTIF_SIZE_FEAT, DEFAULT_NOTIF_SIZE, 100)
+local update_notif_time = feature_state_updator(notifTimeState, NOTIF_TIME_FEAT, DEFAULT_NOTIF_TIME, 1.5, math.huge)
+
+local function fuzzy_compare(num1, num2, epsilon)
+	return math.abs(num1 - num2) <= epsilon
+end
+
+local function update_canvas_size(by)
+	local pad = NOTIF_PAD * math.sign(by)
+	canvasSizeState:set(canvasSizeState._Value + by + pad)
+end
+
+local function update_canvas_size_sticky(frame, by)
+	local beforePos = frame.CanvasPosition.Y
+	local canvasExtra = frame.AbsoluteCanvasSize.Y - frame.AbsoluteWindowSize.Y
+
+	-- Yes, floating point imprecision was breaking this code
+	-- No, I'm not happy about it
+	local sticky = fuzzy_compare(beforePos, canvasExtra, 0.01)
+
+	update_canvas_size(by)
+
+	if sticky then
+		frame.CanvasPosition = Vector2.new(frame.CanvasPosition.X, (frame.AbsoluteCanvasSize.Y - frame.AbsoluteWindowSize.Y))
+	end
+end
+
+function NotificationManager.Push(notif_data)
+	if NotificationManager.Panel == nil then return false end
+	local success, sev = NotifSeverity.FromInput(notif_data.Severity)
+	if not success then
+		warn(`Severity "{notif_data.Severity}" is not valid!`)
+		return false
+	end
+	notif_data.Severity = sev
+	notif_data.Description = description_sanitise(notif_data.Description)
+	local notif, consume = GuiFactory(notif_data)
+	notif.Parent = NotificationManager.Panel
+	update_canvas_size_sticky(NotificationManager.Panel, notif.AbsoluteSize.Y)
+	notif.Destroying:Once( function() 
+		if NotificationManager.Panel == nil then return end
+		update_canvas_size_sticky(NotificationManager.Panel, -notif.AbsoluteSize.Y)
+	end )
+	consume()
+	return true
+end
+
+function NotificationManager.Init()
+	if NotificationManager.Active then
+		return NotificationManager.Panel
+	end
+	NotificationManager.Active = true
+
+	canvasSizeState:set(0)
+
+	local panel = Create(
+		"ScrollingFrame",
+		{
+			Name = "NotificationPanel",
+			BackgroundTransparency = 1,
+			Position = UDim2.new(1, -50, 1, -50),
+			Size = UDim2.new(0.5, -50, 0.5, -50),
+			AnchorPoint = Vector2.new(1, 1),
+			ScrollBarThickness = SCROLLBAR_SIZE,
+			ScrollingDirection = Enum.ScrollingDirection.Y,
+			CanvasSize = Derived(function(newSize)
+				return UDim2.fromOffset(0, newSize)
+			end, canvasSizeState),
+			BorderSizePixel = 0,
+			--ScrollingEnabled = false
+		},
+		{
+			Create(
+				"UIListLayout",
+				{
+					Padding = UDim.new(0, NOTIF_PAD),
+					FillDirection = Enum.FillDirection.Vertical,
+					HorizontalFlex = Enum.UIFlexAlignment.Fill,
+					VerticalAlignment = Enum.VerticalAlignment.Bottom
+				}
+			),
+			Create(
+				"UIPadding",
+				{
+					PaddingRight = UDim.new(0, SCROLLBAR_SIZE)
+				}
+			)
+		}
+	)
+
+	NotificationManager.Panel = panel
+
+	update_notif_size()
+	update_notif_time()
+
+	local signals = {}
+	signals[1] = workspace:GetAttributeChangedSignal(NOTIF_SIZE_FEAT):Connect(update_notif_size)
+	signals[2] = workspace:GetAttributeChangedSignal(NOTIF_TIME_FEAT):Connect(update_notif_time)
+
+	NotificationManager.Signals = signals
+
+	return panel
+end
+
+local signals = {}
+
+
+function NotificationManager.Clean()
+	if not NotificationManager.Active then
+		return
+	end
+	NotificationManager.Active = false
+
+	if NotificationManager.Panel ~= nil then
+		NotificationManager.Panel:Destroy()
+		NotificationManager.Panel = nil
+	end
+
+	for i, signal in ipairs(signals) do
+		signal:Disconnect()
+		signals[i] = nil
+	end
+end
+
+return NotificationManager]]></ProtectedString>
+						<string name="ScriptGuid">{CD966B13-DEE8-4D7D-BDCD-67C0C137DE7F}</string>
+						<BinaryString name="AttributesSerialize"></BinaryString>
+						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+						<bool name="DefinesCapabilities">false</bool>
+						<string name="Name">Manager</string>
+						<int64 name="SourceAssetId">-1</int64>
+						<BinaryString name="Tags"></BinaryString>
+					</Properties>
+				</Item>
+				<Item class="ModuleScript" referent="RBX6D19352570064D7C8C270ED38198AF3D">
+					<Properties>
+						<Content name="LinkedSource"><null></null></Content>
+						<ProtectedString name="Source"><![CDATA[local commonColours = require(script.Parent.Parent.Parent.Util.CommonColors)
+
+local function severity_data(id, time_mult, img, color) return { ID = id, ImageID = img, TimeMult = time_mult, Color = color } end
+local SEVERITY_DATA = {
+	INFO       = severity_data(0, 1,   "17829948066", commonColours.RECRUIT_BLUE),
+	WARN       = severity_data(1, 1.5, "17829955945", commonColours.CHALLENGE_YELLOW),
+	ERR        = severity_data(2, 2,   "17829927053", commonColours.LEGEND_RED),
+	ERR_SEVERE = severity_data(3, 2.5, "13201179730", commonColours.LEGEND_RED)
+}
+
+local IDS = {}
+local MIN, MAX = nil, nil
+local ID_MIN, ID_MAX = math.huge, -math.huge
+for k, v in pairs(SEVERITY_DATA) do
+	IDS[k] = v.ID
+	if ID_MIN > v.ID then
+		MIN = v
+		ID_MIN = v.ID
+	elseif ID_MAX < v.ID then
+		MAX = v
+		ID_MAX = v.ID
+	end
+end
+
+SEVERITY_DATA.MIN = MIN
+SEVERITY_DATA.MAX = MAX
+
+local sevmod = {}
+sevmod.Data = SEVERITY_DATA
+sevmod.IDs  = IDS
+
+function sevmod.FromId(id)
+	local clamped = math.clamp(id, ID_MIN, ID_MAX)
+	if clamped ~= id then
+		warn(`Notifications.Severity.FromId > ID {id} is out of bounds? Will default to {clamped}`)
+	end
+	return sevmod.Data[clamped]
+end
+
+function sevmod.FromName(name)
+	local found = SEVERITY_DATA[name]
+	return found ~= nil, found
+end
+
+function sevmod.FromInput(input)
+	local inT = type(input)
+	if inT == "number" then
+		return true, sevmod.FromId(input)
+	elseif inT == "string" then
+		return sevmod.FromName(input)
+	else
+		return false, nil
+	end
+end
+
+return sevmod]]></ProtectedString>
+						<string name="ScriptGuid">{1960ACE4-A53F-4690-BCA1-1B31D38FAD4E}</string>
+						<BinaryString name="AttributesSerialize"></BinaryString>
+						<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+						<bool name="DefinesCapabilities">false</bool>
+						<string name="Name">Severity</string>
+						<int64 name="SourceAssetId">-1</int64>
+						<BinaryString name="Tags"></BinaryString>
+					</Properties>
+				</Item>
+			</Item>
 		</Item>
-		<Item class="Folder" referent="RBXC3A72AE25EFD4C20AEB35E205E2A0ABD">
+		<Item class="Folder" referent="RBX9544A063536A4A17A2698E1DD34B3D23">
 			<Properties>
 				<BinaryString name="AttributesSerialize"></BinaryString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -5914,16 +6803,18 @@ end]]></ProtectedString>
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
-			<Item class="ModuleScript" referent="RBX3553E6E753894392BB3DC1BD3EE5AF76">
+			<Item class="ModuleScript" referent="RBX7B20E379BFB2472FBD9B7814F10246E1">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local ScriptEditorService = game:GetService("ScriptEditorService")
 
 local InternalAPI = require(script.Parent.Parent.API.Internal)
 local Write = require(script.Parent.Write)
-local StringConversion = require(script.Parent.Parent.StringConversion)
+local StringConversion = require(script.Parent.Parent.Util.StringConversion)
 local Read = require(script.Parent.Parent.Reading.Read)
+
 local ReadbackButton = require(script.Parent.ReadbackButton)
+local NotifMan = require(script.Parent.Parent.Util.Notifications.Manager)
 
 local Button = require(script.Parent.Parent.Util.Button)
 local FeatureCheck = require(script.Parent.Parent.Util.FeatureCheck)
@@ -6035,6 +6926,7 @@ module.Init = function(mouse: PluginMouse)
 		return codeChunks
 	end, CodeState)
 
+	local notifDisabled	= FeatureCheck("SerializerNotifsDisabled", false) == true
 	local apiDevEnabled = FeatureCheck("APIDev") == true
 	local gistEnabled = FeatureCheck("ReadDocs") == true
 	local readbackEnabled = FeatureCheck("Readback") == true
@@ -6051,6 +6943,7 @@ module.Init = function(mouse: PluginMouse)
 			Activated = function()
 				InitCustomMissionSettings(false)
 				local code = GetMissionCode()
+				if code == nil then return end
 
 				if not workspace:FindFirstChild("DebugMission") then
 					local model = Read.Mission(code, 1)
@@ -6068,6 +6961,7 @@ module.Init = function(mouse: PluginMouse)
 				Activated = function()
 					local customSettings = InitCustomMissionSettings(true)
 					local code = GetMissionCode()
+					if code == nil then return end
 
 					if not workspace:FindFirstChild("DebugMission") then
 						local model = Read.Mission(code, 1)
@@ -6107,6 +7001,9 @@ module.Init = function(mouse: PluginMouse)
 					preprocessed.Parent = workspace
 				end,
 			})
+			else nil,
+		if not notifDisabled
+			then NotifMan.Init()
 			else nil,
 		Create("ScrollingFrame", {
 			Size = UDim2.new(0, 200, 1, apiDevEnabled and -180 or -130),
@@ -6176,9 +7073,12 @@ module.Clean = function()
 		return
 	end
 	module.Active = false
+	NotifMan.Clean()
 
-	module.UI:Destroy()
-	module.UI = nil
+	if module.UI then
+		module.UI:Destroy()
+		module.UI = nil
+	end
 end
 
 return module
@@ -6192,14 +7092,20 @@ return module
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBXDAC33FAB77164568872772AA3025EE53">
+			<Item class="ModuleScript" referent="RBX15BED802B23047E392B8E65D1A6C7E63">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
-					<ProtectedString name="Source"><![CDATA[local StringConversion = require(script.Parent.Parent.StringConversion)
+					<ProtectedString name="Source"><![CDATA[local StringConversion = require(script.Parent.Parent.Util.StringConversion)
 local InstanceTypes = require(script.Parent.Parent.Types.InstanceTypes)
 local WriteInstance = require(script.Parent.WriteInstance)
 
+local EncodingService = game:GetService("EncodingService")
+
+local FeatureCheck = require(script.Parent.Parent.Util.FeatureCheck)
+
 local EnumTypes = require(script.Parent.Parent.Types.Enums.Main)
+
+local NotifMan = require(script.Parent.Parent.Util.Notifications.Manager)
 
 local VersionConfig = require(script.Parent.Parent.Util.VersionConfig)
 
@@ -6227,7 +7133,7 @@ end
 local function GetIndex(object)
 	local parent = object.Parent
 	local children = parent:GetChildren()
-	
+
 	local index = 1
 	for _, child in children do
 		if child == object then
@@ -6236,7 +7142,7 @@ local function GetIndex(object)
 			index += 1
 		end
 	end
-	
+
 	return index
 end
 
@@ -6308,11 +7214,14 @@ Write = {
 		return Write.Vector2(Vector2.new(numberRange.Min, numberRange.Max))
 	end,
 
-	FloatSequence = function (numberSequence) -- 2 + 7 * keypoints characters
+	FloatSequence = function(numberSequence) -- 2 + 7 * keypoints characters
 		local keypoints = numberSequence.Keypoints
 		local numberSequenceStr = Write.ShortInt(#keypoints)
 		for i, v in pairs(keypoints) do
-			numberSequenceStr = numberSequenceStr .. Write.ShortBoundedFloat(v.Time) .. Write.Float(v.Value) .. Write.Float(v.Envelope)
+			numberSequenceStr = numberSequenceStr
+				.. Write.ShortBoundedFloat(v.Time)
+				.. Write.Float(v.Value)
+				.. Write.Float(v.Envelope)
 		end
 		return numberSequenceStr
 	end,
@@ -6367,7 +7276,7 @@ Write = {
 		return Write.ShortBoundedFloat(color.R) .. Write.ShortBoundedFloat(color.G) .. Write.ShortBoundedFloat(color.B)
 	end,
 
-	ColorSequence = function (colorSequence) -- 2 + 8 * keypoints characters
+	ColorSequence = function(colorSequence) -- 2 + 8 * keypoints characters
 		local keypoints = colorSequence.Keypoints
 		local colorSequenceStr = Write.ShortInt(#keypoints)
 		for i, v in pairs(keypoints) do
@@ -6382,11 +7291,11 @@ Write = {
 		end
 		return Write.Int(#str) .. str
 	end,
-	
+
 	InstanceReference = function(object)
 		local path = {}
 		local current = object
-		
+
 		-- Get parent path
 		while current and current.Parent and (current.Name ~= `DebugMission` and current ~= workspace) do
 			local index = GetIndex(current)
@@ -6395,15 +7304,15 @@ Write = {
 			end
 			current = current.Parent
 		end
-		
+
 		-- Reverse order
 		for i = 1, math.floor(#path / 2) do
 			path[i], path[#path - i + 1] = path[#path - i + 1], path[i]
 		end
-		
+
 		-- Concat
 		path = table.concat(path, `.`)
-		return Write.Int(#path) .. path
+		return Write.String(path)
 	end,
 
 	ColorMap = function(colorMap)
@@ -6442,9 +7351,22 @@ Write = {
 			mission:FindFirstChild("TableMissionSetup"):Destroy()
 		end
 
+		if MissionSetup.Colors == nil then
+			NotifMan.Push({
+				Title = "MissionSetup Error",
+				Description = [[
+								No Colors table was found in your MissionSetup!
+
+								An empty one will be used as placeholder.
+							]],
+				Severity = "WARN",
+			})
+			MissionSetup.Colors = {}
+		end
+
 		-- setting Color3s into tables for encoding
-		for i, v in pairs(MissionSetup["Colors"]) do
-			MissionSetup["Colors"][i] = { v.R, v.G, v.B }
+		for i, v in pairs(MissionSetup.Colors) do
+			MissionSetup.Colors[i] = { v.R, v.G, v.B }
 		end
 
 		local json = game:GetService("HttpService"):JSONEncode(MissionSetup)
@@ -6458,6 +7380,16 @@ Write = {
 		StringMissionSetup.Name = "StringMissionSetup"
 		StringMissionSetup.Value = mission:FindFirstChild("MissionSetup").Source
 		StringMissionSetup.Parent = mission
+
+		print("Save script source:", mission.MissionSetup, mission.MissionSetup:GetChildren())
+		for _, subModule in mission.MissionSetup:GetChildren() do
+			if subModule:IsA("ModuleScript") then
+				local ExtraModuleSource = Instance.new("StringValue")
+				ExtraModuleSource.Name = subModule.Name
+				ExtraModuleSource.Value = subModule.Source
+				ExtraModuleSource.Parent = StringMissionSetup
+			end
+		end
 
 		-- Numeric index so as to not have the size collide with existing values
 		local colorMap = { [0] = 0 }
@@ -6482,7 +7414,56 @@ Write = {
 		local colorMapStr = Write.ColorMap(colorMapArr)
 		local stringMapStr = Write.StringMap(stringMapArr)
 
-		return colorMapStr .. stringMapStr .. str
+		local missionStr = colorMapStr .. stringMapStr .. str
+
+		if not VersionConfig.UseCompression then
+			return missionStr
+		end
+
+		local compressLevel = FeatureCheck("SerializerCompressionLevel", false)
+
+		if type(compressLevel) ~= "number" then
+			if type(compressLevel) ~= "nil" then
+				warn(
+					`SerializerCompressionLevel : Expected int|nil, got {type(compressLevel)} {compressLevel}! Will use default of 4`
+				)
+			end
+			compressLevel = 4
+		end
+
+		local inputCompressLevel = compressLevel
+		compressLevel = math.round(compressLevel)
+		if compressLevel ~= inputCompressLevel then
+			warn(
+				`SerializerCompressionLevel : Expected integer from range -7 <-> 22 inclusive, got {inputCompressLevel}! Will use rounded value of {compressLevel}`
+			)
+		end
+
+		inputCompressLevel = compressLevel
+		compressLevel = math.clamp(compressLevel, -7, 22)
+
+		if compressLevel ~= inputCompressLevel then
+			warn(
+				`SerializerCompressionLevel : Expected integer from range -7 <-> 22 inclusive, got {inputCompressLevel}! Will use clamped value of {compressLevel}`
+			)
+		end
+
+		local buf = buffer.create(#missionStr)
+		buffer.writestring(buf, 0, missionStr)
+
+		local compressedBuf = EncodingService:Base64Encode(
+			EncodingService:CompressBuffer(buf, Enum.CompressionAlgorithm.Zstd, compressLevel)
+		)
+
+		local compressedStr = buffer.readstring(compressedBuf, 0, buffer.len(compressedBuf))
+
+		if FeatureCheck("SerializerCompressionStats") == true then
+			print(`=== Compression Stats ===`)
+			print(`Before Compression: {#missionStr * 0.001}K`)
+			print(`After Compression: {#compressedStr * 0.001}K`)
+		end
+
+		return compressedStr
 	end,
 
 	Instance = function(object, colorMap, stringMap)
@@ -6498,8 +7479,8 @@ Write = {
 				childrenProperties = childrenProperties .. Write.Instance(v, colorMap, stringMap)
 			end
 			return instanceType .. objectProperties .. childrenProperties .. StringConversion.NumberToString(0, 1),
-			colorMap,
-			stringMap
+				colorMap,
+				stringMap
 		else
 			return StringConversion.NumberToString(InstanceTypes.Nil, 1), colorMap, stringMap
 		end
@@ -6535,10 +7516,10 @@ return Write
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBXABCAAF96C1E849B2B754ECD70E4B31C6">
+			<Item class="ModuleScript" referent="RBX5BAEBF4FB17E43BE81102A13380501B3">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
-					<ProtectedString name="Source"><![CDATA[local StringConversion = require(script.Parent.Parent.StringConversion)
+					<ProtectedString name="Source"><![CDATA[local StringConversion = require(script.Parent.Parent.Util.StringConversion)
 local InstanceProperties = require(script.Parent.Parent.Types.InstanceProperties)
 local AttributeTypes = require(script.Parent.Parent.Types.AttributeTypes)
 local AttributeValidation = require(script.Parent.Parent.AttributeValidation)
@@ -6684,13 +7665,15 @@ return WriteInstance
 					<BinaryString name="Tags"></BinaryString>
 				</Properties>
 			</Item>
-			<Item class="ModuleScript" referent="RBX832E11DAF9894366B51AC8E66C389869">
+			<Item class="ModuleScript" referent="RBX74E483C011A441A5A1E918BCEAF09BD6">
 				<Properties>
 					<Content name="LinkedSource"><null></null></Content>
 					<ProtectedString name="Source"><![CDATA[local VersionConfig = require(script.Parent.Parent.Util.VersionConfig)
 local HttpService = game:GetService("HttpService")
 
 local Read = require(script.Parent.Parent.Reading.Read)
+
+local NotifMan = require(script.Parent.Parent.Util.Notifications.Manager)
 
 local Actor = require(script.Parent.Parent.Util.Actor)
 local Create = Actor.Create
@@ -6708,6 +7691,15 @@ local GIST_NONRAW_INFO_PAT   = `{GIST_NONRAW_BASE}/({URL_ELEM})/({URL_ELEM})`
 local GIST_URL_BASE          = HTTPS_BASE .. "gist%.githubusercontent%.com"
 local GIST_INFO_PAT_NO_NAME  = `{GIST_URL_BASE}/({URL_ELEM})/{URL_ELEM}/raw`
 local GIST_INFO_PAT_FILENAME = `{GIST_URL_BASE}/({URL_ELEM})/{URL_ELEM}/raw/{URL_ELEM}/({URL_ELEM})`
+
+local function readbackError(desc)
+	NotifMan.Push{
+		Title = "Readback Failure",
+		Description = desc,
+		Severity = "ERR",
+		Rich = true
+	}
+end
 
 local textboxDefaults = {
 	Font = Enum.Font.SciFi,
@@ -6794,6 +7786,9 @@ local function createReadbackBox(enabledState)
 			local success, missionCode = gistLinkToMissionCode(inputText)
 			if not success then
 				readErrState:set(missionCode)
+				readbackError [[
+					Invalid gist link.
+				]]
 				return
 			end
 			inputText = missionCode
@@ -6804,11 +7799,25 @@ local function createReadbackBox(enabledState)
 			inputNoComment = inputText:match("!!!.-!!!(.+)")
 			if inputNoComment == nil then
 				readErrState:set("Invalid Opening Comment")
+				readbackError [[
+								Mission code's Opening Comment was invalid!
+
+								Check you have the right link and try again.
+				]]
 				return
 			end
 		end
 
-		local inputHeader, cursor = Read.MissionCodeHeader(inputNoComment, 1)
+		local success, inputHeader, cursor = pcall(Read.MissionCodeHeader, inputNoComment, 1)
+		if not success then
+			readErrState:set("Invalid Code Header")
+			readbackError [[
+				The header of the inputted code is not valid!
+
+				<font transparency="0.5" size="11">Please stop entering random text into that box</font>
+			]]
+		end
+
 		local inputContent = string.sub(inputNoComment, cursor)
 
 		local existingMapInfo = readbackState.MapInfo
@@ -6821,12 +7830,27 @@ local function createReadbackBox(enabledState)
 		codeInput.Text = ""
 		if existingMapInfo.CodeVersion ~= inputHeader.CodeVersion then
 			readErrState:set("Code Version Mismatch")
+			readbackError [[
+				The Code Version of the most recently entered code didn't match that of the previous code!
+
+				Check that the code parts you are entering belong to the same mission.
+			]]
 			return
 		elseif existingMapInfo.MapId ~= inputHeader.MapId then
 			readErrState:set("Map ID Mismatch")
+			readbackError [[
+				The Map ID of the most recently entered code didn't match that of the previous code!
+
+				Check that the code parts you are entering belong to the same mission.
+			]]
 			return
 		elseif existingMapInfo.CodeTotal ~= inputHeader.CodeTotal then
 			readErrState:set("Code Count Mismatch")
+			readbackError [[
+				The total mission code count of the most recently entered code didn't match that of the previous code!
+
+				Check that the code parts you are entering belong to the same mission.
+			]]
 			return
 		end
 
@@ -6852,6 +7876,17 @@ local function createReadbackBox(enabledState)
 		local success, errReason = VersionConfig:change_version(readbackState.MapInfo.CodeVersion)
 		if not success then
 			readErrState:set(errReason)
+			NotifMan.Push{
+				Title = "Internal Error",
+				Description = [[
+					Failed to change internal version compatibility settings!
+					The error reason has been printed to the Script Output.
+					Restart your studio to avoid potential issues with bad version settings.
+					Report this issue <b>ASAP</b>.
+				]],
+				Severity = "ERR_SEVERE",
+			}
+			warn(errReason)
 			VersionConfig:change_version(VersionConfig.LatestVersion)
 			return
 		end
@@ -6960,7 +7995,7 @@ local function createReadbackBox(enabledState)
 end
 
 return createReadbackBox]]></ProtectedString>
-					<string name="ScriptGuid">{FEB35A4F-5CD8-4EDB-95A9-675F50DB47ED}</string>
+					<string name="ScriptGuid">{43B74329-4C1A-454A-853B-B84D6B3E5EE5}</string>
 					<BinaryString name="AttributesSerialize"></BinaryString>
 					<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 					<bool name="DefinesCapabilities">false</bool>
