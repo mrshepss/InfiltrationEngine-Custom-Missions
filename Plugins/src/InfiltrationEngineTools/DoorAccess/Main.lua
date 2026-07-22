@@ -303,7 +303,7 @@ function module:InitUI()
 	CUSTOM_RESTRICTIONS_LIST = {}
 	CUSTOM_RESTRICTIONS_ICONS_LIST = {}
 	
-	local itemsFolder = workspace:WaitForChild("DebugMission"):WaitForChild("CustomItems")
+	local itemsFolder = workspace:FindFirstChild("DebugMission"):FindFirstChild("CustomItems")
 	if itemsFolder then
 		for _, item in pairs(itemsFolder:GetChildren()) do
 			local itemClass = item:GetAttribute("Class")
