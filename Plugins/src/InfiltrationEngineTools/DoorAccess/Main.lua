@@ -31,8 +31,10 @@ local RESTRICTIONS_LIST = {
 	"KeycardC",
 	"KeycardBlank",
 	"KeycardBlankMagstripe",
-	"SecurityBadge",
 	"ITBadge",
+	"WorkerBadge",
+	"SecurityBadge",
+	"HighSecurityBadge",
 	"LeadSecurityBadge",
 	"ArchiveKey",
 	"MRKey",
@@ -44,6 +46,8 @@ local RESTRICTIONS_LIST = {
 	"FenceGateKey",
 	"SafeKey",
 	"FilingCabinetKey",
+	"ITClosetKey",
+	"LaundryKey",
 }
 
 local RESTRICTIONS_ICONS_LIST = {
@@ -57,8 +61,10 @@ local RESTRICTIONS_ICONS_LIST = {
 	["KeycardC"] = "97330397237451",
 	["KeycardBlank"] = "125985694568048",
 	["KeycardBlankMagstripe"] = "125203335531284",
-	["SecurityBadge"] = "14598774566",
 	["ITBadge"] = "79761241684752",
+	["WorkerBadge"] = "92884966005437",
+	["SecurityBadge"] = "14598774566",
+	["HighSecurityBadge"] = "139020373938850",
 	["LeadSecurityBadge"] = "97451862463788",
 	["ArchiveKey"] = "9236250491",
 	["MRKey"] = "9236250491",
@@ -70,6 +76,8 @@ local RESTRICTIONS_ICONS_LIST = {
 	["FenceGateKey"] = "9236250491",
 	["SafeKey"] = "9236250491",
 	["FilingCabinetKey"] = "9236250491",
+	["ITClosetKey"] = "9236250491",
+	["LaundryKey"] = "9236250491",
 }
 
 type DoorData = {
@@ -298,7 +306,7 @@ function module:GetHoveredDoor(): (Part?, number?)
 	return nil, nil
 end
 
--- UI setupz
+-- UI setup
 function module:InitUI()
 	CUSTOM_RESTRICTIONS_LIST = {}
 	CUSTOM_RESTRICTIONS_ICONS_LIST = {}

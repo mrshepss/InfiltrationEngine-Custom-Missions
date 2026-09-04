@@ -94,13 +94,34 @@ local function CreateNode(pos, placed, generateLinks)
 	return p
 end
 
+local function CreateDoorNodes(door, generateLinks)
+	local p0 = (door.CFrame * CFrame.new(0, door.Name == "Link" and 0.5 or -3, DOOR_BUFFER)).p
+	local p1 = (door.CFrame * CFrame.new(0, door.Name == "Link" and 0.5 or -3, -DOOR_BUFFER)).p
+	local p0Exists = false
+	local p1Exists = false
+	for i in pairs(CurrentMap) do
+		if not p0Exists and i.Position == p0 then
+			p0Exists = true
+		end
+		if not p1Exists and i.Position == p1 then
+			p1Exists = true
+		end
+	end
+	if not p0Exists and ZoneUtil.InZone(CurrentZone, p0) then
+		CreateNode(p0, false, generateLinks)
+	end
+	if not p1Exists and ZoneUtil.InZone(CurrentZone, p1) then
+		CreateNode(p1, false, generateLinks)
+	end
+end
+
 local function OpenZone(newZone)
 	if CurrentZone then
 		CloseZone()
 	end
 
 	local DoorNodes = {}
-	for _, prop in pairs(workspace.DebugMission.Props:GetChildren()) do
+	for _, prop in pairs(workspace.DebugMission.Props:GetDescendants()) do
 		if prop.Name:match("Door") and prop.ClassName == "Part" then
 			local p0 = (prop.CFrame * CFrame.new(0, -3, DOOR_BUFFER)).p
 			local p1 = (prop.CFrame * CFrame.new(0, -3, -DOOR_BUFFER)).p
@@ -115,7 +136,7 @@ local function OpenZone(newZone)
 
 	if workspace.DebugMission.Cells:FindFirstChild("Links") then
 		for _, link in pairs(workspace.DebugMission.Cells.Links:GetChildren()) do
-			if link:GetAttribute("Path") and CurrentZone:GetAttribute("Path") ~= ""then
+			if link:GetAttribute("Path") then
 				local p0 = (link.CFrame * CFrame.new(0, 0.5, DOOR_BUFFER)).p
 				local p1 = (link.CFrame * CFrame.new(0, 0.5, -DOOR_BUFFER)).p
 				if ZoneUtil.InZone(newZone, p0) then
@@ -296,12 +317,20 @@ return {
 				end
 			elseif io.KeyCode == Enum.KeyCode.G then
 				if CurrentZone then
-					CreateNode(mouse.Hit.p + Vector3.new(0, 1, 0), true, true)
+					if mouse.Target:IsA("Part") and (mouse.Target.Name:match("Door") or mouse.Target.Name == "Link") then
+						CreateDoorNodes(mouse.Target, true)
+					else
+						CreateNode(mouse.Hit.p + Vector3.new(0, 1, 0), true, true)
+					end
 					Save()
 				end
 			elseif io.KeyCode == Enum.KeyCode.H then
 				if CurrentZone then
-					CreateNode(mouse.Hit.p + Vector3.new(0, 1, 0), true, false)
+					if mouse.Target:IsA("Part") and mouse.Target.Name:match("Door") then
+						CreateDoorNodes(mouse.Target, false)
+					else
+						CreateNode(mouse.Hit.p + Vector3.new(0, 1, 0), true, false)
+					end
 					Save()
 				end
 			elseif io.KeyCode == Enum.KeyCode.R then
